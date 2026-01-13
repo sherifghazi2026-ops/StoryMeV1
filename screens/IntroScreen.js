@@ -5,7 +5,11 @@ const { width, height } = Dimensions.get('window');
 
 export default function IntroScreen({ navigation }) {
   useEffect(() => {
-    setTimeout(() => { navigation.replace('Language'); }, 4000);
+    // زيادة المدة إلى 7 ثوانٍ كما طلبت
+    const timer = setTimeout(() => { 
+      navigation.replace('Language'); 
+    }, 7000);
+    return () => clearTimeout(timer);
   }, []);
 
   return (

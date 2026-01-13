@@ -9,13 +9,15 @@ import MainMenuScreen from './screens/MainMenuScreen';
 import StoryLibraryScreen from './screens/StoryLibraryScreen';
 import StoryReaderScreen from './screens/StoryReaderScreen';
 import StoreScreen from './screens/StoreScreen';
+import GamesListScreen from './screens/GamesListScreen'; 
+import GameScreen from './screens/GameScreen';
 
 const Stack = createStackNavigator();
 
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Intro" screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Intro" component={IntroScreen} />
         <Stack.Screen name="Language" component={LanguageScreen} />
         <Stack.Screen name="ChildForm" component={ChildFormScreen} />
@@ -23,6 +25,8 @@ export default function App() {
         <Stack.Screen name="StoryLibrary" component={StoryLibraryScreen} />
         <Stack.Screen name="StoryReader" component={StoryReaderScreen} />
         <Stack.Screen name="Store" component={StoreScreen} />
+        <Stack.Screen name="GamesList" component={GamesListScreen} />
+        <Stack.Screen name="YoyaGame" component={GameScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
