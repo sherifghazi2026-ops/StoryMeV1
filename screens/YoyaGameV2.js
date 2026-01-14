@@ -1,123 +1,133 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
-import { Audio } from 'expo-av';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, PanResponder, Animated, ImageBackground, TouchableOpacity, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const BOARD_SIZE = width - 40;
+const PLAYER_SIZE = 40;
 
 export default function YoyaGameV2({ navigation }) {
-  const [gems, setGems] = useState(0);
-  const [health, setHealth] = useState(3);
-  const [isGameOver, setIsGameOver] = useState(false);
-  const [activeDragons, setActiveDragons] = useState([]);
+  const [gameState, setGameState] = useState('START');
+  const pan = useRef(new Animated.ValueXY({ x: 5, y: 5 })).current;
+  
+  // أنيميشن التنانين المتحركة داخل المتاهة كعوائق
+  const dragonPos = useRef(new Animated.Value(0)).current;
 
-  // دالة تشغيل الأصوات
-  async function playSound(type) {
-    let uri = type === 'hit' 
-      ? 'https://www.soundjay.com/buttons/sounds/button-10.mp3' 
-      : 'https://www.soundjay.com/buttons/sounds/button-37.mp3';
-    try {
-      const { sound } = await Audio.Sound.createAsync({ uri });
-      await sound.playAsync();
-    } catch (e) {}
-  }
-
-  // توليد التنانين التي تحاول سرقة العظمة
   useEffect(() => {
-    if (health <= 0) {
-      setIsGameOver(true);
-      return;
+    if (gameState === 'PLAYING') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(dragonPos, { toValue: BOARD_SIZE - 60, duration: 2000, useNativeDriver: false }),
+          Animated.timing(dragonPos, { toValue: 0, duration: 2000, useNativeDriver: false })
+        ])
+      ).start();
     }
+  }, [gameState]);
 
-    const interval = setInterval(() => {
-      const newDragon = {
-        id: Math.random().toString(),
-        x: Math.random() * (width - 70),
-        y: new Animated.Value(-50),
-      };
-      
-      setActiveDragons(prev => [...prev, newDragon]);
+  const walls = [
+    { x: 0, y: 80, w: BOARD_SIZE * 0.7, h: 15 },
+    { x: BOARD_SIZE * 0.3, y: 180, w: BOARD_SIZE * 0.7, h: 15 },
+    { x: 0, y: 280, w: BOARD_SIZE * 0.7, h: 15 },
+  ];
 
-      // حركة التنين باتجاه العظمة في الأسفل
-      Animated.timing(newDragon.y, {
-        toValue: height - 160,
-        duration: 3500, // سرعة السقوط
-        useNativeDriver: false,
-      }).start(({ finished }) => {
-        if (finished) {
-          // إذا وصل التنين للعظمة تنقص الصحة
-          setHealth(h => h - 1);
-          setActiveDragons(prev => prev.filter(d => d.id !== newDragon.id));
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        let newX = gestureState.moveX - 40;
+        let newY = gestureState.moveY - 250;
+
+        // حدود المتاهة
+        if (newX < 0) newX = 0;
+        if (newY < 0) newY = 0;
+        if (newX > BOARD_SIZE - PLAYER_SIZE) newX = BOARD_SIZE - PLAYER_SIZE;
+        if (newY > BOARD_SIZE - PLAYER_SIZE) newY = BOARD_SIZE - PLAYER_SIZE;
+
+        // تصادم مع الجدران
+        let collision = false;
+        walls.forEach(w => {
+          if (newX < w.x + w.w && newX + PLAYER_SIZE > w.x && newY < w.y + w.h && newY + PLAYER_SIZE > w.y) {
+            collision = true;
+          }
+        });
+
+        if (!collision) {
+          pan.setValue({ x: newX, y: newY });
+          // فحص الفوز
+          if (newY > BOARD_SIZE - 60 && newX > BOARD_SIZE - 60) {
+            finishGame();
+          }
         }
-      });
-    }, 1800); // تنين جديد كل 1.8 ثانية
+      },
+      onPanResponderRelease: () => {}
+    })
+  ).current;
 
-    return () => clearInterval(interval);
-  }, [health]);
-
-  const tapDragon = (id) => {
-    playSound('hit');
-    setGems(prev => prev + 5); // الجائزة 5 جواهر لكل تنين مطرود
-    setActiveDragons(prev => prev.filter(d => d.id !== id));
+  const finishGame = async () => {
+    if (gameState === 'WINNER') return;
+    setGameState('WINNER');
+    const current = await AsyncStorage.getItem('total_gems');
+    await AsyncStorage.setItem('total_gems', (parseInt(current || '0') + 20).toString());
   };
 
+  if (gameState === 'START') return (
+    <View style={styles.center}>
+      <Text style={styles.title}>متاهة يويا 🧩</Text>
+      <TouchableOpacity style={styles.startBtn} onPress={() => setGameState('PLAYING')}>
+        <Text style={styles.btnTxt}>ابدأ التحدي 🚀</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (gameState === 'WINNER') return (
+    <View style={[styles.center, {backgroundColor: '#27AE60'}]}>
+      <Text style={{fontSize: 80}}>🏆</Text>
+      <Text style={styles.title}>بطل المتاهة!</Text>
+      <Text style={{color: '#FFF', fontSize: 20}}>+20 جوهرة 💎</Text>
+      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('GamesList')}>
+        <Text>العودة للألعاب</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
-    <View style={styles.container}>
-      {/* واجهة المعلومات */}
-      <View style={styles.ui}>
-        <View style={styles.statBox}><Text style={styles.uiText}>❤️ {health}</Text></View>
-        <View style={styles.statBox}><Text style={styles.uiText}>💎 {gems}</Text></View>
-      </View>
-
-      {!isGameOver ? (
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>احمِ عظمة ليو! 🦴</Text>
-          
-          {/* عظمة ليو الذهبية */}
-          <View style={styles.boneContainer}>
-            <Text style={styles.bone}>🦴</Text>
-          </View>
-
-          {/* التنانين الهاجمة */}
-          {activeDragons.map(dragon => (
-            <Animated.View 
-              key={dragon.id} 
-              style={[styles.dragonContainer, { left: dragon.x, top: dragon.y }]}
-            >
-              <TouchableOpacity onPress={() => tapDragon(dragon.id)}>
-                <Text style={{ fontSize: 60 }}>🐲</Text>
-              </TouchableOpacity>
-            </Animated.View>
+    <ImageBackground source={{uri: 'https://img.freepik.com/free-vector/green-grass-background_1048-9333.jpg'}} style={styles.container}>
+      <View style={styles.gameBox}>
+        <View style={styles.mazeContainer}>
+          {walls.map((w, i) => (
+            <View key={i} style={[styles.wall, {left: w.x, top: w.y, width: w.w, height: w.h}]} />
           ))}
           
-          {/* يويا الحارس */}
-          <Text style={styles.yoya}>👦</Text>
+          {/* التنين العائق المتحرك */}
+          <Animated.View style={[styles.dragon, { top: 130, left: dragonPos }]}>
+             <TouchableOpacity onPress={() => { pan.setValue({x:5, y:5}); Alert.alert("🐲 احذر!", "التنين أعادك للبداية!"); }}>
+                <Text style={{fontSize: 30}}>🐲</Text>
+             </TouchableOpacity>
+          </Animated.View>
+
+          <Text style={styles.target}>🏆</Text>
+          <Animated.View {...panResponder.panHandlers} style={[pan.getLayout(), styles.player]}>
+            <Text style={{fontSize: 35}}>👦</Text>
+          </Animated.View>
         </View>
-      ) : (
-        <View style={styles.gameOver}>
-          <Text style={styles.gameOverTxt}>لقد سرقوا العظمة! 🦴</Text>
-          <Text style={styles.resultTxt}>جمعت {gems} جوهرة لحماية ليو</Text>
-          <TouchableOpacity style={styles.btn} onPress={() => navigation.goBack()}>
-            <Text style={styles.btnText}>العودة للمغامرات</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+      </View>
+      <Text style={styles.tip}>اسحب يويا بحذر وتجنب التنين! 🐲</Text>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#2C3E50' }, // جو ليلي لحماية العظمة
-  ui: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 50 },
-  statBox: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 15 },
-  uiText: { fontSize: 24, fontWeight: 'bold', color: '#FFF' },
-  title: { textAlign: 'center', fontSize: 20, color: '#F1C40F', marginTop: 10, fontWeight: 'bold' },
-  boneContainer: { position: 'absolute', bottom: 40, alignSelf: 'center' },
-  bone: { fontSize: 100, textShadowColor: '#F1C40F', textShadowRadius: 10 },
-  yoya: { position: 'absolute', bottom: 40, left: 30, fontSize: 60 },
-  dragonContainer: { position: 'absolute', zIndex: 10 },
-  gameOver: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  gameOverTxt: { fontSize: 32, color: '#E74C3C', fontWeight: 'bold', textAlign: 'center' },
-  resultTxt: { fontSize: 22, color: '#FFF', marginVertical: 30 },
-  btn: { backgroundColor: '#F1C40F', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 25 },
-  btnText: { color: '#000', fontSize: 20, fontWeight: 'bold' }
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2C3E50' },
+  title: { fontSize: 30, color: '#FFF', fontWeight: 'bold', marginBottom: 20 },
+  startBtn: { backgroundColor: '#FF9F43', padding: 20, borderRadius: 20 },
+  btnTxt: { color: '#FFF', fontWeight: 'bold' },
+  gameBox: { padding: 10, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 20 },
+  mazeContainer: { width: BOARD_SIZE, height: BOARD_SIZE, backgroundColor: '#FFF', borderRadius: 10 },
+  wall: { position: 'absolute', backgroundColor: '#8B4513' },
+  player: { position: 'absolute', zIndex: 10 },
+  dragon: { position: 'absolute', zIndex: 5 },
+  target: { position: 'absolute', bottom: 10, right: 10, fontSize: 40 },
+  tip: { marginTop: 20, color: '#FFF', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 10 },
+  backBtn: { backgroundColor: '#FFF', padding: 15, borderRadius: 20, marginTop: 20 }
 });

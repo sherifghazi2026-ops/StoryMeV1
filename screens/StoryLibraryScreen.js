@@ -21,13 +21,10 @@ export default function StoryLibraryScreen({ navigation }) {
     const c = await AsyncStorage.getItem('total_coins');
     const u = await AsyncStorage.getItem('unlockedBundles');
     let unlockedList = u ? JSON.parse(u) : [];
-
-    // فتح الباقة الأولى (المجانية) تلقائياً
     if (!unlockedList.includes('1')) {
       unlockedList.push('1');
       await AsyncStorage.setItem('unlockedBundles', JSON.stringify(unlockedList));
     }
-
     setTotalCoins(parseInt(c || '0'));
     setUnlocked(unlockedList);
   };
@@ -90,7 +87,10 @@ export default function StoryLibraryScreen({ navigation }) {
                 <View style={[styles.emojiContainer, { backgroundColor: cardColors[index % cardColors.length] + '20' }]}>
                   <Text style={styles.storyEmojiText}>{s.emoji || '📖'}</Text>
                 </View>
-                <Text style={styles.storyTitleText} numberOfLines={2}>{s.title}</Text>
+                {/* الحل هنا: زيادة الارتفاع والسماح بالتفاف النص */}
+                <View style={styles.titleWrapper}>
+                   <Text style={styles.storyTitleText} numberOfLines={3} adjustsFontSizeToFit>{s.title}</Text>
+                </View>
                 <View style={[styles.readButtonSmall, { backgroundColor: cardColors[index % cardColors.length] }]}>
                   <Text style={styles.readButtonText}>إبدأ الآن</Text>
                 </View>
@@ -119,10 +119,11 @@ const styles = StyleSheet.create({
   bundlePriceText: { color: '#E67E22', fontWeight: 'bold', fontSize: 13 },
   bundleIconText: { fontSize: 35 },
   storiesGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between' },
-  storyCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 20, padding: 15, marginBottom: 15, alignItems: 'center', elevation: 4 },
+  storyCard: { width: CARD_WIDTH, backgroundColor: '#FFF', borderRadius: 20, padding: 15, marginBottom: 15, alignItems: 'center', elevation: 4, minHeight: 180 },
   emojiContainer: { width: 65, height: 65, borderRadius: 32.5, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   storyEmojiText: { fontSize: 30 },
-  storyTitleText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center', color: '#333', height: 36, marginBottom: 10 },
-  readButtonSmall: { paddingVertical: 5, paddingHorizontal: 15, borderRadius: 10 },
+  titleWrapper: { height: 50, justifyContent: 'center', width: '100%' }, // مساحة ثابتة للعنوان
+  storyTitleText: { fontSize: 14, fontWeight: 'bold', textAlign: 'center', color: '#333' },
+  readButtonSmall: { paddingVertical: 5, paddingHorizontal: 15, borderRadius: 10, marginTop: 5 },
   readButtonText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' }
 });

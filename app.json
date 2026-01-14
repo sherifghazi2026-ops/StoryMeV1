@@ -1,17 +1,16 @@
 {
   "expo": {
-    "name": "StoryMe",
-    "slug": "storyme",
+    "name": "StoryMeApp2026",
+    "slug": "StoryMeApp2026",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "platforms": [
-      "ios",
-      "android"
+    "assetBundlePatterns": [
+      "**/*"
     ],
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

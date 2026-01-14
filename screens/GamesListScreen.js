@@ -1,133 +1,134 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
+const COLUMN_WIDTH = (width - 60) / 2;
 
-// إعداد بيانات 20 لعبة مع تسعير تصاعدي يبدأ من 100 وصولاً إلى 2000
-const gamesData = Array.from({ length: 20 }, (_, i) => ({
-  id: (i + 1).toString(),
-  name: `مغامرة يويا ${i + 1}`,
-  screen: `GameScreen`, 
-  price: (i + 1) * 100, // اللعبة الأولى 100، الثانية 200، إلخ.
-}));
+// المصفوفة الموحدة بالأسماء الصحيحة التي برمجناها
+const gamesData = [
+  { id: '1', name: 'صيد الجواهر', icon: '💎', price: 0, screen: 'YoyaGameV1' },
+  { id: '2', name: 'متاهة يويا', icon: '🧩', price: 100, screen: 'YoyaGameV2' },
+  { id: '3', name: 'مغامرة يويا', icon: '🏃‍♂️', price: 200, screen: 'YoyaGameV3' },
+  { id: '4', name: 'بالونات يويا', icon: '🎈', price: 300, screen: 'YoyaGameV4' },
+  { id: '5', name: 'صيد البحيرة', icon: '🎣', price: 400, screen: 'YoyaGameV5' },
+];
+
+// تكملة القائمة تلقائياً حتى 20
+for(let i=6; i<=20; i++) {
+  gamesData.push({ 
+    id: i.toString(), 
+    name: `مغامرة ${i}`, 
+    icon: '🎮', 
+    price: i * 100, 
+    screen: `YoyaGameV${i}` 
+  });
+}
 
 export default function GamesListScreen({ navigation }) {
   const [userGems, setUserGems] = useState(0);
-  const [unlockedGames, setUnlockedGames] = useState([]); // لا توجد ألعاب مفتوحة تلقائياً
+  const [unlockedGames, setUnlockedGames] = useState(["1"]); // اللعبة الأولى مفتوحة دائماً
   const isFocused = useIsFocused();
 
-  useEffect(() => {
-    if (isFocused) { loadData(); }
+  useEffect(() => { 
+    if (isFocused) loadData(); 
   }, [isFocused]);
 
   const loadData = async () => {
     try {
       const savedGems = await AsyncStorage.getItem('total_gems');
       const savedUnlocked = await AsyncStorage.getItem('unlockedGames');
-      
       setUserGems(savedGems ? parseInt(savedGems) : 0);
-      
-      if (savedUnlocked) {
-        setUnlockedGames(JSON.parse(savedUnlocked));
-      } else {
-        // في البداية لا يوجد ألعاب مفتوحة
-        setUnlockedGames([]);
-      }
+      if (savedUnlocked) setUnlockedGames(JSON.parse(savedUnlocked));
     } catch (e) {
-      console.error("Error loading games data", e);
+      console.log("Error loading data");
     }
   };
 
-  const handleGamePress = async (game) => {
+  const handleGamePress = (game) => {
     if (unlockedGames.includes(game.id)) {
-      // إذا كانت مفتوحة، ننتقل للعبة ونمرر رقم المستوى
-      navigation.navigate('GameScreen', { level: parseInt(game.id) });
+      navigation.navigate(game.screen, { gameName: game.name });
     } else {
-      // إذا كانت مغلقة، نتحقق من الرصيد للشراء
       if (userGems >= game.price) {
-        Alert.alert('فتح مغامرة جديدة 💎', `هل تريد صرف ${game.price} جوهرة لفتح "${game.name}"؟`, [
-          { text: 'إلغاء', style: 'cancel' },
-          { text: 'شراء وفتح ✅', onPress: () => unlockGame(game) }
+        Alert.alert('فتح اللعبة', `هل تريد صرف ${game.price} جوهرة لفتح ${game.name}؟`, [
+          { text: 'إلغاء' },
+          { text: 'فتح الآن', onPress: () => unlockGame(game) }
         ]);
-      } else {
-        Alert.alert('رصيدك لا يكفي ❌', `سعر اللعبة ${game.price} جوهرة. اجمع المزيد من الجواهر عبر قراءة القصص!`);
+      } else { 
+        Alert.alert('رصيدك غير كافٍ', `تحتاج إلى ${game.price} جوهرة.`); 
       }
     }
   };
 
   const unlockGame = async (game) => {
-    try {
-      const newBalance = userGems - game.price;
-      const newUnlocked = [...unlockedGames, game.id];
-      
-      await AsyncStorage.setItem('total_gems', newBalance.toString());
-      await AsyncStorage.setItem('unlockedGames', JSON.stringify(newUnlocked));
-      
-      setUserGems(newBalance);
-      setUnlockedGames(newUnlocked);
-      
-      Alert.alert('نجاح ✅', `تم فتح "${game.name}" بنجاح!`);
-    } catch (err) {
-      Alert.alert('خطأ', 'حدثت مشكلة أثناء الشراء.');
-    }
-  };
-
-  const renderGameItem = ({ item }) => {
-    const isLocked = !unlockedGames.includes(item.id);
-    return (
-      <TouchableOpacity 
-        style={[styles.card, isLocked && styles.cardLocked]} 
-        onPress={() => handleGamePress(item)}
-      >
-        <Image source={require('../assets/Game1.jpg')} style={styles.gameIcon} />
-        <Text style={styles.gameName}>{item.name}</Text>
-        <View style={isLocked ? styles.priceTag : styles.openTag}>
-          <Text style={styles.tagText}>{isLocked ? `🔒 ${item.price} 💎` : 'العب الآن'}</Text>
-        </View>
-      </TouchableOpacity>
-    );
+    const newBalance = userGems - game.price;
+    const newUnlocked = [...unlockedGames, game.id];
+    await AsyncStorage.setItem('total_gems', newBalance.toString());
+    await AsyncStorage.setItem('unlockedGames', JSON.stringify(newUnlocked));
+    setUserGems(newBalance);
+    setUnlockedGames(newUnlocked);
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backTxt}>🏠</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('MainMenu')}>
+          <Text style={styles.back}>🏠</Text>
         </TouchableOpacity>
-        <View style={styles.balanceContainer}>
-          <Text style={styles.balanceValue}>{userGems} 💎</Text>
+        <View style={styles.gemBadge}>
+          <Text style={styles.gemsTxt}>💎 {userGems}</Text>
         </View>
       </View>
-      
-      <Text style={styles.pageTitle}>متجر ألعاب يويا</Text>
-      
+
+      <Text style={styles.mainTitle}>عالم ألعاب يويا 🎮</Text>
+
       <FlatList
         data={gamesData}
-        renderItem={renderGameItem}
-        keyExtractor={item => item.id}
         numColumns={2}
-        contentContainerStyle={styles.listPadding}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => {
+          const isUnlocked = unlockedGames.includes(item.id);
+          return (
+            <TouchableOpacity 
+              style={[styles.card, !isUnlocked && styles.lockedCard]} 
+              onPress={() => handleGamePress(item)}
+            >
+              <Text style={styles.icon}>{isUnlocked ? item.icon : '🔒'}</Text>
+              <Text style={styles.name}>{item.name}</Text>
+              <Text style={styles.status}>
+                {isUnlocked ? 'العب الآن ▶️' : `${item.price} 💎`}
+              </Text>
+            </TouchableOpacity>
+          );
+        }}
+        keyExtractor={item => item.id}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F5FF', paddingTop: 50 },
+  container: { flex: 1, backgroundColor: '#F8F9FA', paddingTop: 50 },
   topBar: { flexDirection: 'row-reverse', justifyContent: 'space-between', paddingHorizontal: 20, alignItems: 'center' },
-  backBtn: { padding: 10, backgroundColor: '#FFF', borderRadius: 15, elevation: 3 },
-  backTxt: { fontSize: 20 },
-  balanceContainer: { backgroundColor: '#FFD700', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, elevation: 4 },
-  balanceValue: { fontWeight: 'bold', color: '#000', fontSize: 16 },
-  pageTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginVertical: 20, color: '#2C3E50' },
-  listPadding: { paddingHorizontal: 10, paddingBottom: 30 },
-  card: { flex: 1, margin: 10, backgroundColor: '#FFF', borderRadius: 25, padding: 15, alignItems: 'center', elevation: 5 },
-  cardLocked: { opacity: 0.85, backgroundColor: '#E0E7FF' },
-  gameIcon: { width: width * 0.28, height: width * 0.28, borderRadius: 20, marginBottom: 10 },
-  gameName: { fontSize: 14, fontWeight: 'bold', color: '#2C3E50', textAlign: 'center', marginBottom: 10, height: 35 },
-  priceTag: { backgroundColor: '#FF4757', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  openTag: { backgroundColor: '#2ED573', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  tagText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 }
+  back: { fontSize: 30 },
+  gemBadge: { backgroundColor: '#2980B9', paddingVertical: 5, paddingHorizontal: 15, borderRadius: 20 },
+  gemsTxt: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
+  mainTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginVertical: 15, color: '#2C3E50' },
+  listContent: { paddingHorizontal: 10, paddingBottom: 40 },
+  card: { 
+    width: COLUMN_WIDTH, 
+    margin: 10, 
+    backgroundColor: '#FFF', 
+    padding: 20, 
+    borderRadius: 25, 
+    alignItems: 'center', 
+    elevation: 5,
+    borderBottomWidth: 4,
+    borderBottomColor: '#BDC3C7'
+  },
+  lockedCard: { backgroundColor: '#F2F2F2', opacity: 0.7 },
+  icon: { fontSize: 50, marginBottom: 10 },
+  name: { fontSize: 16, fontWeight: 'bold', color: '#2C3E50', textAlign: 'center' },
+  status: { fontSize: 12, fontWeight: 'bold', marginTop: 8, color: '#E67E22' }
 });

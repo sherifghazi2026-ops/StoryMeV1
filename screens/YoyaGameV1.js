@@ -1,72 +1,123 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ImageBackground, Animated, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
-const GRID_SIZE = 4;
-const CELL_SIZE = (width - 60) / GRID_SIZE;
+const { width, height } = Dimensions.get('window');
 
 export default function YoyaGameV1({ navigation }) {
-  // الحالة الافتراضية للشبكة (0: فارغ، 1: طريق مستقيم، 2: منعطف)
-  const [grid, setGrid] = useState(Array(GRID_SIZE * GRID_SIZE).fill(0));
-  const [won, setWon] = useState(false);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [gameState, setGameState] = useState('START');
+  const [items, setItems] = useState([]);
+  
+  // أنيميشن التنانين
+  const dragonAnims = useRef([0, 1, 2, 3, 4].map(() => new Animated.Value(0))).current;
 
-  const handleCellPress = (index) => {
-    if (won) return;
-    let newGrid = [...grid];
-    newGrid[index] = (newGrid[index] + 1) % 3; // التبديل بين الأشكال
-    setGrid(newGrid);
-    checkWin(newGrid);
+  useEffect(() => {
+    if (gameState === 'PLAYING') {
+      const timer = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) { clearInterval(timer); finishGame(); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+
+      // تحريك التنانين وتفعيل فحص التصادم
+      dragonAnims.forEach((anim, index) => {
+        const duration = 3000 + (index * 500);
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(anim, { toValue: width - 60, duration: duration, useNativeDriver: false }),
+            Animated.timing(anim, { toValue: 0, duration: duration, useNativeDriver: false })
+          ])
+        ).start();
+      });
+
+      return () => clearInterval(timer);
+    }
+  }, [gameState]);
+
+  const startGame = () => {
+    setScore(0);
+    setTimeLeft(30);
+    generateElements();
+    setGameState('PLAYING');
   };
 
-  const checkWin = (currentGrid) => {
-    // منطق فوز مبسط: إذا امتلأت المربعات الأساسية بين البداية والنهاية
-    const pathFilled = [8, 9, 5, 6, 2, 3].every(idx => currentGrid[idx] !== 0);
-    if (pathFilled) setWon(true);
+  const generateElements = () => {
+    let newItems = [];
+    for (let i = 0; i < 20; i++) {
+      newItems.push({ id: 'gem' + i, type: '💎', x: Math.random() * (width - 60), y: Math.random() * (height - 350) + 150 });
+    }
+    for (let i = 0; i < 6; i++) {
+      newItems.push({ id: 'rock' + i, type: '🪨', x: Math.random() * (width - 60), y: Math.random() * (height - 350) + 150 });
+    }
+    setItems(newItems);
   };
+
+  const collectItem = (item) => {
+    if (item.type === '🪨') {
+       Alert.alert("أوبس! 🪨", "اصطدمت بصخرة، فقدت ثانية من الوقت!");
+       setTimeLeft(t => Math.max(0, t - 2));
+       return;
+    }
+    setItems(items.filter(i => i.id !== item.id));
+    setScore(s => {
+        if (s + 1 === 20) finishGame();
+        return s + 1;
+    });
+  };
+
+  const finishGame = async () => {
+    setGameState('WINNER');
+    const current = await AsyncStorage.getItem('total_gems');
+    await AsyncStorage.setItem('total_gems', (parseInt(current || '0') + score).toString());
+  };
+
+  if (gameState === 'START') return (
+    <View style={styles.center}>
+      <Text style={styles.title}>صيد الجواهر 💎</Text>
+      <TouchableOpacity style={styles.startBtn} onPress={startGame}><Text style={styles.btnTxt}>ابدأ 🚀</Text></TouchableOpacity>
+    </View>
+  );
+
+  if (gameState === 'WINNER') return (
+    <View style={[styles.center, {backgroundColor: '#2ecc71'}]}>
+      <Text style={styles.winnerTitle}>انتهى الوقت! 🎉</Text>
+      <Text style={styles.winnerScore}>جمعت {score} جوهرة</Text>
+      <TouchableOpacity style={styles.exitBtn} onPress={() => navigation.navigate('GamesList')}><Text>العودة</Text></TouchableOpacity>
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ابنِ الطريق لليو! 🐕</Text>
-      
-      <View style={styles.gameBoard}>
-        {/* البيت في البداية */}
-        <Text style={[styles.icon, { position: 'absolute', left: -40, bottom: CELL_SIZE }]}>🏠</Text>
-        {/* ليو في النهاية */}
-        <Text style={[styles.icon, { position: 'absolute', right: -10, top: -10 }]}>🐕</Text>
-
-        <View style={styles.gridContainer}>
-          {grid.map((cell, index) => (
-            <TouchableOpacity key={index} style={styles.cell} onPress={() => handleCellPress(index)}>
-              {cell === 1 && <View style={styles.roadStraight} />}
-              {cell === 2 && <View style={styles.roadTurn} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {won && (
-        <View style={styles.winOverlay}>
-          <Text style={styles.winText}>أحسنت! وصل يويا لليو 🎉</Text>
-          <TouchableOpacity style={styles.btn} onPress={() => navigation.goBack()}>
-            <Text style={styles.btnText}>رجوع</Text>
+    <ImageBackground source={{ uri: 'https://img.freepik.com/free-vector/forest-scene-with-various-forest-trees_1308-55271.jpg' }} style={styles.container}>
+      <View style={styles.header}><Text style={styles.headerTxt}>⏱️ {timeLeft} | 💎 {score}/20</Text></View>
+      {dragonAnims.map((anim, i) => (
+        <Animated.View key={i} style={[styles.item, { top: 150 + i * 80, left: anim }]}>
+          <TouchableOpacity onPress={() => { Alert.alert("تنين! 🐲", "خسرت 5 جواهر!"); setScore(s => Math.max(0, s - 5)); }}>
+            <Text style={{ fontSize: 45 }}>🐲</Text>
           </TouchableOpacity>
-        </View>
-      )}
-    </View>
+        </Animated.View>
+      ))}
+      {items.map(item => (
+        <TouchableOpacity key={item.id} onPress={() => collectItem(item)} style={[styles.item, { left: item.x, top: item.y }]}>
+          <Text style={{ fontSize: 40 }}>{item.type}</Text>
+        </TouchableOpacity>
+      ))}
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F9FF', alignItems: 'center', paddingTop: 60 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#2D3436', marginBottom: 20 },
-  gameBoard: { width: width - 40, height: width - 40, backgroundColor: '#FFF', borderRadius: 15, elevation: 5, padding: 10 },
-  gridContainer: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
-  cell: { width: CELL_SIZE, height: CELL_SIZE, borderWidth: 0.5, borderColor: '#DDD', justifyContent: 'center', alignItems: 'center' },
-  roadStraight: { width: '100%', height: 15, backgroundColor: '#636E72' },
-  roadTurn: { width: 30, height: 30, borderLeftWidth: 15, borderBottomWidth: 15, borderColor: '#636E72', borderBottomLeftRadius: 20 },
-  icon: { fontSize: 40, zIndex: 10 },
-  winOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center' },
-  winText: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
-  btn: { backgroundColor: '#00B894', padding: 15, borderRadius: 20 },
-  btnText: { color: '#FFF', fontWeight: 'bold' }
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#34495e' },
+  title: { fontSize: 35, color: '#FFF', fontWeight: 'bold', marginBottom: 20 },
+  startBtn: { backgroundColor: '#f1c40f', padding: 20, borderRadius: 20 },
+  btnTxt: { fontSize: 20, fontWeight: 'bold' },
+  header: { paddingTop: 50, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  headerTxt: { color: '#FFF', fontSize: 24, fontWeight: 'bold' },
+  item: { position: 'absolute' },
+  winnerTitle: { fontSize: 30, color: '#FFF', fontWeight: 'bold' },
+  winnerScore: { fontSize: 22, color: '#f1c40f', marginVertical: 20 },
+  exitBtn: { backgroundColor: '#FFF', padding: 15, borderRadius: 15 }
 });

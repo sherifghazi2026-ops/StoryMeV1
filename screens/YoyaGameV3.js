@@ -1,135 +1,178 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, TouchableOpacity, PanResponder } from 'react-native';
-import { Audio } from 'expo-av';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Animated, Image, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
 export default function YoyaGameV3({ navigation }) {
   const [score, setScore] = useState(0);
-  const [gemsCount, setGemsCount] = useState(0);
-  const [energy, setEnergy] = useState(12);
-  const [isGameOver, setIsGameOver] = useState(false);
-  const playerX = useRef(new Animated.Value(width / 2 - 40)).current;
-  const currentX = useRef(width / 2 - 40);
+  const [gameState, setGameState] = useState('START');
+  const jumpAnim = useRef(new Animated.Value(0)).current;
+  const [elements, setElements] = useState([]);
+  const scoreRef = useRef(0);
 
   useEffect(() => {
-    const listener = playerX.addListener((v) => { currentX.current = v.value; });
-    return () => playerX.removeListener(listener);
-  }, []);
+    if (gameState === 'PLAYING') {
+      const interval = setInterval(() => {
+        generateElement();
+      }, 1500);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (evt, gs) => {
-        let newX = evt.nativeEvent.pageX - 40;
-        if (newX < 0) newX = 0;
-        if (newX > width - 80) newX = width - 80;
-        playerX.setValue(newX);
-      },
-    })
-  ).current;
+      const collisionInterval = setInterval(() => {
+        checkCollisions();
+      }, 50);
 
-  async function playSound(type) {
-    try {
-      const uri = type === 'hit' 
-        ? 'https://www.soundjay.com/buttons/sounds/button-37.mp3' 
-        : 'https://www.soundjay.com/buttons/sounds/button-10.mp3';
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
-      sound.setOnPlaybackStatusUpdate((s) => { if (s.didJustFinish) sound.unloadAsync(); });
-    } catch (e) {}
-  }
-
-  const [items, setItems] = useState([]);
-
-  useEffect(() => {
-    if (isGameOver) return;
-    const interval = setInterval(() => {
-      const rand = Math.random();
-      let type = rand > 0.7 ? 'gem' : (rand > 0.4 ? 'fruit' : 'fire');
-      
-      const newItem = {
-        id: Math.random().toString(),
-        type: type,
-        x: Math.random() * (width - 60),
-        y: new Animated.Value(-50),
+      return () => {
+        clearInterval(interval);
+        clearInterval(collisionInterval);
       };
+    }
+  }, [gameState]);
 
-      setItems(prev => [...prev, newItem]);
+  const generateElement = () => {
+    const types = ['💎', '🪨', '🐲'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const newEl = {
+      id: Math.random().toString(),
+      type: type,
+      x: new Animated.Value(width),
+      collected: false,
+    };
+    
+    setElements(prev => [...prev, newEl]);
 
-      Animated.timing(newItem.y, {
-        toValue: height - 140,
-        duration: 2800, // سرعة أبطأ قليلاً للدقة
-        useNativeDriver: false,
-      }).start(({ finished }) => {
-        if (finished) {
-          // فحص دقيق للتصادم
-          if (newItem.x > currentX.current - 30 && newItem.x < currentX.current + 70) {
-            if (newItem.type === 'gem') {
-              setGemsCount(g => Math.min(g + 1, 12));
-              setScore(s => s + 10);
-              playSound('hit');
-            } else if (newItem.type === 'fruit') {
-              setEnergy(e => Math.min(e + 1, 12));
-              playSound('hit');
-            } else if (newItem.type === 'fire') {
-              setEnergy(e => {
-                if (e <= 1) setIsGameOver(true);
-                return e - 1;
-              });
-              playSound('fire');
+    Animated.timing(newEl.x, {
+      toValue: -100,
+      duration: 3000,
+      useNativeDriver: false
+    }).start();
+  };
+
+  const checkCollisions = () => {
+    elements.forEach(el => {
+      // الحصول على القيمة الحالية لموقع العنصر وموقع يويا
+      const elX = el.x._value;
+      const yoyaY = jumpAnim._value; // القيمة 0 تعني على الأرض، والقيم السالبة تعني قفز
+
+      // منطق الاصطدام (يويا في المسافة بين 50 و 100 من اليسار)
+      if (elX > 40 && elX < 90) {
+        if (el.type === '💎' && !el.collected) {
+            // التحقق من أن يويا قريب من الجوهرة عمودياً (أثناء القفز أو السقوط)
+            if (yoyaY < -50) { 
+               el.collected = true;
+               el.x.setValue(-200); // إخفاء الجوهرة
+               setScore(prev => {
+                 scoreRef.current = prev + 1;
+                 return prev + 1;
+               });
             }
-          }
-          setItems(prev => prev.filter(i => i.id !== newItem.id));
+        } else if ((el.type === '🪨' || el.type === '🐲') && yoyaY > -50) {
+            // إذا كان العائق صخرة أو تنين ويويا على الأرض (لم يقفز عالياً بما يكفي)
+            gameOver();
         }
-      });
-    }, 1500); // تقليل عدد العناصر المتساقطة
-    return () => clearInterval(interval);
-  }, [isGameOver]);
+      }
+    });
+  };
+
+  const jump = () => {
+    if (jumpAnim._value === 0) {
+      Animated.sequence([
+        Animated.timing(jumpAnim, { toValue: -180, duration: 400, useNativeDriver: false }),
+        Animated.timing(jumpAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
+      ]).start();
+    }
+  };
+
+  const gameOver = () => {
+    setGameState('GAMEOVER');
+  };
+
+  const finishGame = async () => {
+    const currentGems = await AsyncStorage.getItem('total_gems');
+    const newTotal = parseInt(currentGems || '0') + score;
+    await AsyncStorage.setItem('total_gems', newTotal.toString());
+    setGameState('WINNER');
+  };
+
+  if (gameState === 'START') return (
+    <View style={styles.center}>
+      <Image source={{ uri: 'https://i.gifer.com/2Ct5.gif' }} style={StyleSheet.absoluteFill} />
+      <View style={styles.overlay}>
+        <Text style={styles.title}>مغامرة يويا 🏃‍♂️</Text>
+        <Text style={styles.hint}>اقفز فوق التنانين 🐲 واجمع الجواهر 💎</Text>
+        <TouchableOpacity style={styles.startBtn} onPress={() => setGameState('PLAYING')}>
+          <Text style={styles.startBtnTxt}>ابدأ الآن</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  if (gameState === 'GAMEOVER') return (
+    <View style={[styles.center, {backgroundColor: '#C0392B'}]}>
+      <Text style={styles.winEmoji}>💥</Text>
+      <Text style={styles.winTitle}>خسرت المغامرة!</Text>
+      <Text style={styles.winScore}>اصطدمت بالعائق ولم تجمع جواهر</Text>
+      <TouchableOpacity style={styles.backBtn} onPress={() => {setScore(0); setElements([]); setGameState('PLAYING')}}>
+        <Text style={styles.backBtnTxt}>حاول مرة أخرى 🔄</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (gameState === 'WINNER') return (
+    <View style={[styles.center, {backgroundColor: '#27AE60'}]}>
+      <Text style={styles.winEmoji}>🏆</Text>
+      <Text style={styles.winTitle}>أحسنت يا بطل!</Text>
+      <Text style={styles.winScore}>تم إضافة {score} جوهرة لرصيدك 💎</Text>
+      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.navigate('GamesList')}>
+        <Text style={styles.backBtnTxt}>العودة للألعاب</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
-      <View style={styles.header}>
-        <Text style={styles.headerText}>💎 الجواهر: {gemsCount}/12</Text>
-        <View style={styles.batteryRow}>
-          {Array.from({ length: energy }).map((_, i) => (
-            <Text key={i} style={{ fontSize: 14 }}>🔋</Text>
-          ))}
-        </View>
+    <TouchableOpacity activeOpacity={1} onPress={jump} style={styles.container}>
+      <Image source={{ uri: 'https://i.gifer.com/2Ct5.gif' }} style={StyleSheet.absoluteFill} />
+      
+      <View style={styles.hud}>
+        <Text style={styles.hudTxt}>💎 {score}/20</Text>
+        {score >= 20 && (
+          <TouchableOpacity onPress={finishGame} style={styles.winBtn}>
+            <Text style={{fontWeight: 'bold', color: '#000'}}>استلام الجواهر 🎉</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {!isGameOver ? (
-        <View style={styles.gameArea}>
-          {items.map(item => (
-            <Animated.View key={item.id} style={[styles.fallingItem, { left: item.x, top: item.y }]}>
-              <Text style={{ fontSize: 40 }}>{item.type === 'gem' ? '💎' : item.type === 'fruit' ? '🍎' : '🔥'}</Text>
-            </Animated.View>
-          ))}
-          <Animated.View style={[styles.player, { left: playerX }]}>
-            <Text style={{ fontSize: 70 }}>🧑‍🚀</Text>
-          </Animated.View>
-        </View>
-      ) : (
-        <View style={styles.gameOver}>
-          <Text style={styles.goTitle}>انتهت المحاولة!</Text>
-          <TouchableOpacity style={styles.btn} onPress={() => navigation.goBack()}>
-            <Text style={styles.btnText}>رجوع</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+      <Animated.View style={[styles.player, { transform: [{ translateY: jumpAnim }] }]}>
+        <Text style={{fontSize: 60}}>👦</Text>
+      </Animated.View>
+
+      {elements.map((el) => (
+        <Animated.View key={el.id} style={[styles.element, { left: el.x }]}>
+             <Text style={{fontSize: el.type === '💎' ? 35 : 50}}>{el.type}</Text>
+        </Animated.View>
+      ))}
+      
+      <View style={styles.groundLine} />
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1A1A2E' },
-  header: { paddingTop: 60, paddingHorizontal: 20 },
-  headerText: { color: '#FFD700', fontSize: 18, fontWeight: 'bold' },
-  batteryRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5 },
-  gameArea: { flex: 1 },
-  fallingItem: { position: 'absolute' },
-  player: { position: 'absolute', bottom: 80 },
-  gameOver: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  goTitle: { fontSize: 30, color: '#FFF', marginBottom: 20 },
-  btn: { backgroundColor: '#FFD700', padding: 15, borderRadius: 20 },
-  btnText: { fontWeight: 'bold' }
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  overlay: { backgroundColor: 'rgba(0,0,0,0.6)', padding: 25, borderRadius: 20, alignItems: 'center' },
+  title: { fontSize: 32, color: '#FFF', fontWeight: 'bold' },
+  hint: { color: '#FFD700', marginVertical: 10, textAlign: 'center' },
+  startBtn: { backgroundColor: '#FF9F43', paddingHorizontal: 40, paddingVertical: 15, borderRadius: 25, marginTop: 10 },
+  startBtnTxt: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  player: { position: 'absolute', bottom: 90, left: 60, zIndex: 10 },
+  element: { position: 'absolute', bottom: 95 },
+  hud: { paddingTop: 50, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', zIndex: 20 },
+  hudTxt: { fontSize: 22, color: '#FFF', fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.7)', padding: 8, borderRadius: 10 },
+  winBtn: { backgroundColor: '#FFD700', padding: 12, borderRadius: 12, elevation: 5 },
+  groundLine: { position: 'absolute', bottom: 85, width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
+  winTitle: { fontSize: 30, fontWeight: 'bold', color: '#FFF' },
+  winEmoji: { fontSize: 80, marginBottom: 10 },
+  winScore: { fontSize: 18, color: '#FFF', marginVertical: 15, textAlign: 'center' },
+  backBtn: { backgroundColor: '#FFF', padding: 15, borderRadius: 20, width: 200, alignItems: 'center' },
+  backBtnTxt: { color: '#2C3E50', fontWeight: 'bold' }
 });
