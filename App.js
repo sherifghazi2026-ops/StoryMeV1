@@ -9,8 +9,9 @@ import MainMenuScreen from './screens/MainMenuScreen';
 import StoryLibraryScreen from './screens/StoryLibraryScreen';
 import StoryReaderScreen from './screens/StoryReaderScreen';
 import StoreScreen from './screens/StoreScreen';
-import GamesListScreen from './screens/GamesListScreen'; 
-import GameScreen from './screens/GameScreen';
+import GamesListScreen from './screens/GamesListScreen';
+import GameScreen from './screens/GameScreen'; 
+import ChargeGemsScreen from './screens/ChargeGemsScreen';
 
 const Stack = createStackNavigator();
 
@@ -26,7 +27,12 @@ export default function App() {
         <Stack.Screen name="StoryReader" component={StoryReaderScreen} />
         <Stack.Screen name="Store" component={StoreScreen} />
         <Stack.Screen name="GamesList" component={GamesListScreen} />
-        <Stack.Screen name="YoyaGame" component={GameScreen} />
+        
+        {/* تم تغيير الاسم هنا ليتطابق مع طلب الانتقال GameScreen */}
+        <Stack.Screen name="GameScreen" component={GameScreen} />
+        
+        <Stack.Screen name="ChargeGems" component={ChargeGemsScreen} />
+        <Stack.Screen name="ChargeCoins" component={ChargeGemsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
