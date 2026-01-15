@@ -5,7 +5,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function MainMenuScreen({ navigation }) {
   const [coins, setCoins] = useState(0);
   const [gems, setGems] = useState(0);
-  const [profile, setProfile] = useState({ name: 'بطلنا', image: null });
+  const [profile, setProfile] = useState({ name: 'بطلنا', image: null, gender: 'boy' });
+
+  const FIXED_BLANK_AVATAR = 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png';
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
@@ -14,22 +16,13 @@ export default function MainMenuScreen({ navigation }) {
         let sGems = await AsyncStorage.getItem('total_gems');
         const sProfile = await AsyncStorage.getItem('userProfile');
 
-        // نظام الرصيد الترحيبي لأول مرة
-        if (sCoins === null) {
-          await AsyncStorage.setItem('total_coins', '100');
-          sCoins = '100';
-        }
-        if (sGems === null) {
-          await AsyncStorage.setItem('total_gems', '20');
-          sGems = '20';
-        }
+        if (sCoins === null) { await AsyncStorage.setItem('total_coins', '100'); sCoins = '100'; }
+        if (sGems === null) { await AsyncStorage.setItem('total_gems', '20'); sGems = '20'; }
 
         setCoins(parseInt(sCoins));
         setGems(parseInt(sGems));
         if (sProfile) setProfile(JSON.parse(sProfile));
-      } catch (e) {
-        console.error("Error loading balances:", e);
-      }
+      } catch (e) { console.error("Error loading balances:", e); }
     });
     return unsubscribe;
   }, [navigation]);
@@ -41,7 +34,7 @@ export default function MainMenuScreen({ navigation }) {
         <View style={styles.stat}><Text style={styles.statTxt}>💎 {gems}</Text></View>
         <TouchableOpacity onPress={() => navigation.navigate('ChildForm', { editMode: true })}>
           <Image
-            source={profile.image ? { uri: profile.image } : { uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
+            source={{ uri: profile.image ? profile.image : FIXED_BLANK_AVATAR }}
             style={styles.avatar}
           />
         </TouchableOpacity>
@@ -74,8 +67,8 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', width: '90%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   stat: { backgroundColor: '#FFF', padding: 10, borderRadius: 15, elevation: 2, minWidth: 80, alignItems: 'center' },
   statTxt: { fontWeight: 'bold', fontSize: 16 },
-  avatar: { width: 65, height: 65, borderRadius: 32.5, borderWidth: 2, borderColor: '#4A90E2' },
-  welcome: { fontSize: 24, fontWeight: 'bold', marginBottom: 30 },
+  avatar: { width: 65, height: 65, borderRadius: 32.5, borderWidth: 2, borderColor: '#4A90E2', backgroundColor: '#EEE' },
+  welcome: { fontSize: 24, fontWeight: 'bold', marginBottom: 30, color: '#2C3E50' },
   mainBtn: { width: '85%', padding: 25, borderRadius: 20, backgroundColor: '#4A90E2', marginBottom: 20, elevation: 4 },
   btnText: { color: '#FFF', fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
   row: { flexDirection: 'row', width: '85%', justifyContent: 'space-between', marginTop: 10 },

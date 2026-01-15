@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput, KeyboardAvoidingView, Platform, Keyboard, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ChargeGemsScreen({ navigation }) {
   const [currentGems, setCurrentGems] = useState(0);
   const [promoCode, setPromoCode] = useState('');
+  const SUPPORT_PHONE = "01223369908"; // الرقم الذي طلبته
 
   useEffect(() => { loadBalances(); }, []);
 
@@ -18,7 +19,6 @@ export default function ChargeGemsScreen({ navigation }) {
   const handleApplyCode = async () => {
     const code = promoCode.trim().toUpperCase();
     let gemsToAdd = 0;
-
     if (code === 'GEMS100') gemsToAdd = 100;
     else if (code === 'GEMS200') gemsToAdd = 200;
 
@@ -32,6 +32,12 @@ export default function ChargeGemsScreen({ navigation }) {
     } else {
       Alert.alert('خطأ ❌', 'كود الجواهر غير صحيح');
     }
+  };
+
+  const openWhatsApp = () => {
+    const msg = "مرحباً، أريد شحن جواهر للألعاب.";
+    const url = `whatsapp://send?phone=2${SUPPORT_PHONE}&text=${encodeURIComponent(msg)}`;
+    Linking.openURL(url).catch(() => Alert.alert("خطأ", "تطبيق واتساب غير مثبت على جهازك"));
   };
 
   return (
@@ -48,15 +54,27 @@ export default function ChargeGemsScreen({ navigation }) {
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.promoLabel}>أدخل كود الجواهر واضغط تفعيل 👇</Text>
+          <Text style={styles.promoLabel}>أدخل كود التفعيل المستلم 👇</Text>
           <View style={styles.actionRow}>
-            <TextInput style={styles.compactInput} placeholder="مثال: GEMS100" value={promoCode} onChangeText={setPromoCode} autoCapitalize="none" />
-            <TouchableOpacity style={styles.compactBtn} onPress={handleApplyCode}><Text style={styles.applyBtnText}>تفعيل ✅</Text></TouchableOpacity>
+            <TextInput 
+              style={styles.compactInput} 
+              placeholder="GEMS..." 
+              placeholderTextColor="#999"
+              value={promoCode} 
+              onChangeText={setPromoCode} 
+              autoCapitalize="none"
+              color="#000000" // نص أسود واضح
+            />
+            <TouchableOpacity style={styles.compactBtn} onPress={handleApplyCode}><Text style={styles.applyBtnText}>تفعيل</Text></TouchableOpacity>
           </View>
         </View>
 
+        <TouchableOpacity style={styles.whatsappBtn} onPress={openWhatsApp}>
+          <Text style={styles.btnTextWhite}>تواصل لشحن الجواهر (واتساب) 💬</Text>
+        </TouchableOpacity>
+
         <View style={styles.infoBox}>
-          <Text style={styles.phoneNum}>01223369908</Text>
+          <Text style={styles.phoneNum}>{SUPPORT_PHONE}</Text>
           <Text style={styles.infoText}>للشحن: حول فودافون كاش لهذا الرقم ثم أرسل صورة التحويل واتساب لتستلم الكود.</Text>
         </View>
       </ScrollView>
@@ -78,6 +96,8 @@ const styles = StyleSheet.create({
   compactInput: { flex: 1, backgroundColor: '#F0F3F7', padding: 15, borderRadius: 15, fontSize: 18, marginRight: 10, textAlign: 'center' },
   compactBtn: { backgroundColor: '#27AE60', padding: 15, borderRadius: 15 },
   applyBtnText: { color: '#FFF', fontWeight: 'bold' },
+  whatsappBtn: { backgroundColor: '#25D366', padding: 18, borderRadius: 20, alignItems: 'center', marginHorizontal: 20, elevation: 3 },
+  btnTextWhite: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   infoBox: { backgroundColor: '#E8F4FD', margin: 20, padding: 20, borderRadius: 20, alignItems: 'center', borderLeftWidth: 5, borderLeftColor: '#2980B9' },
   phoneNum: { fontSize: 24, color: '#2980B9', fontWeight: 'bold' },
   infoText: { textAlign: 'center', color: '#34495E', fontSize: 13, marginTop: 10, lineHeight: 20 }

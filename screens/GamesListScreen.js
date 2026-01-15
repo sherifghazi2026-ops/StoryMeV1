@@ -6,23 +6,22 @@ import { useIsFocused } from '@react-navigation/native';
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 60) / 2;
 
-// المصفوفة الموحدة بالأسماء الصحيحة التي برمجناها
 const gamesData = [
   { id: '1', name: 'صيد الجواهر', icon: '💎', price: 0, screen: 'YoyaGameV1' },
-  { id: '2', name: 'متاهة يويا', icon: '🧩', price: 100, screen: 'YoyaGameV2' },
-  { id: '3', name: 'مغامرة يويا', icon: '🏃‍♂️', price: 200, screen: 'YoyaGameV3' },
-  { id: '4', name: 'بالونات يويا', icon: '🎈', price: 300, screen: 'YoyaGameV4' },
+  { id: '2', name: 'تحدي الأخلاق', icon: '🏆', price: 100, screen: 'YoyaGameV2' },
+  { id: '3', name: 'مغامرة ممتعة', icon: '🏃‍♂️', price: 200, screen: 'YoyaGameV3' },
+  { id: '4', name: 'بالونات الألوان', icon: '🎈', price: 300, screen: 'YoyaGameV4' },
   { id: '5', name: 'صيد البحيرة', icon: '🎣', price: 400, screen: 'YoyaGameV5' },
 ];
 
-// تكملة القائمة تلقائياً حتى 20
+// تكملة القائمة تلقائياً حتى 20 مع أسماء عامة
 for(let i=6; i<=20; i++) {
-  gamesData.push({ 
-    id: i.toString(), 
-    name: `مغامرة ${i}`, 
-    icon: '🎮', 
-    price: i * 100, 
-    screen: `YoyaGameV${i}` 
+  gamesData.push({
+    id: i.toString(),
+    name: `تحدي ${i}`,
+    icon: '🎮',
+    price: i * 100,
+    screen: `YoyaGameV${i}`
   });
 }
 
@@ -31,8 +30,8 @@ export default function GamesListScreen({ navigation }) {
   const [unlockedGames, setUnlockedGames] = useState(["1"]); // اللعبة الأولى مفتوحة دائماً
   const isFocused = useIsFocused();
 
-  useEffect(() => { 
-    if (isFocused) loadData(); 
+  useEffect(() => {
+    if (isFocused) loadData();
   }, [isFocused]);
 
   const loadData = async () => {
@@ -55,8 +54,8 @@ export default function GamesListScreen({ navigation }) {
           { text: 'إلغاء' },
           { text: 'فتح الآن', onPress: () => unlockGame(game) }
         ]);
-      } else { 
-        Alert.alert('رصيدك غير كافٍ', `تحتاج إلى ${game.price} جوهرة.`); 
+      } else {
+        Alert.alert('رصيدك غير كافٍ', `تحتاج إلى ${game.price} جوهرة.`);
       }
     }
   };
@@ -81,7 +80,7 @@ export default function GamesListScreen({ navigation }) {
         </View>
       </View>
 
-      <Text style={styles.mainTitle}>عالم ألعاب يويا 🎮</Text>
+      <Text style={styles.mainTitle}>عالم الألعاب 🎮</Text>
 
       <FlatList
         data={gamesData}
@@ -90,8 +89,8 @@ export default function GamesListScreen({ navigation }) {
         renderItem={({ item }) => {
           const isUnlocked = unlockedGames.includes(item.id);
           return (
-            <TouchableOpacity 
-              style={[styles.card, !isUnlocked && styles.lockedCard]} 
+            <TouchableOpacity
+              style={[styles.card, !isUnlocked && styles.lockedCard]}
               onPress={() => handleGamePress(item)}
             >
               <Text style={styles.icon}>{isUnlocked ? item.icon : '🔒'}</Text>
@@ -116,13 +115,13 @@ const styles = StyleSheet.create({
   gemsTxt: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
   mainTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginVertical: 15, color: '#2C3E50' },
   listContent: { paddingHorizontal: 10, paddingBottom: 40 },
-  card: { 
-    width: COLUMN_WIDTH, 
-    margin: 10, 
-    backgroundColor: '#FFF', 
-    padding: 20, 
-    borderRadius: 25, 
-    alignItems: 'center', 
+  card: {
+    width: COLUMN_WIDTH,
+    margin: 10,
+    backgroundColor: '#FFF',
+    padding: 20,
+    borderRadius: 25,
+    alignItems: 'center',
     elevation: 5,
     borderBottomWidth: 4,
     borderBottomColor: '#BDC3C7'

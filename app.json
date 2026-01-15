@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "StoryMeApp2026",
-    "slug": "StoryMeApp2026",
+    "slug": "storyme",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -37,6 +37,7 @@
       "eas": {
         "projectId": "28f2fc14-4d34-479b-ae5b-d6ff2e2a619f"
       }
-    }
+    },
+    "owner": "sharo2026"
   }
 }
