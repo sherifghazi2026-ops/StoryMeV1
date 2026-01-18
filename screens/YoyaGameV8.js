@@ -1,115 +1,304 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ImageBackground, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  StyleSheet, View, Text, Dimensions, Image, Animated, 
+  Vibration, PanResponder, Modal, ScrollView,
+  TouchableOpacity, Share
+} from 'react-native';
+import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
-const { width, height } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function YoyaGameV8({ navigation, route }) {
+const GRAVITY = 0.50;
+const JUMP_POWER = -15.0;
+const CONSTANT_SCROLL_SPEED = 2.4; 
+const HERO_WIDTH = 70;
+const HERO_HEIGHT = 90;
+
+const YoyaGameV8 = ({ navigation }) => {
+  const [gameState, setGameState] = useState('home');
+  const [platforms, setPlatforms] = useState([]);
+  const [gems, setGems] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [hearts, setHearts] = useState([]);
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [gameState, setGameState] = useState('START');
-  const [items, setItems] = useState([]);
-  const movementType = "static";
+  const [collectedBooks, setCollectedBooks] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [isFacingRight, setIsFacingRight] = useState(true);
+  const [heroName, setHeroName] = useState('يُويَا');
 
-  const startGame = () => {
-    setScore(0);
-    setTimeLeft(30);
-    setGameState('PLAYING');
-    generateItems();
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [currentQuestionData, setCurrentQuestionData] = useState(null);
+  const [showWinScreen, setShowWinScreen] = useState(false);
+
+  const pos = useRef({ x: SCREEN_WIDTH / 2 - HERO_WIDTH / 2, y: SCREEN_HEIGHT - 200 });
+  const vel = useRef({ x: 0, y: 0 });
+  const scrollOffset = useRef(0);
+  const gameLoopRef = useRef(null);
+
+  const animPos = useRef(new Animated.ValueXY({ x: pos.current.x, y: pos.current.y })).current;
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const knobX = useRef(new Animated.Value(0)).current;
+
+  const heroImage = require('../assets/Boy.gif');
+
+  const bookQuestions = [
+    {
+      id: 1, title: "كوب مكسور", icon: "🥛💔",
+      question: "وجدت كوباً مكسوراً على الأرض. ماذا أفعل؟",
+      spokenQuestion: "وَجَدْتُ كُوبًا مَكْسُورًا عَلَى الْأَرْضِ. مَاذَا أَفْعَلُ؟",
+      options: [
+        { id: 0, text: 'أحاول جمعه بيدي', spokenText: 'أُحَاوِلُ جَمْعَهُ بِيَدِي. خَطَأ! الزُّجَاجُ الْمَكْسُورُ قَدْ يُؤْذِيكَ.', isCorrect: false },
+        { id: 1, text: 'أطلب مساعدة أمي', spokenText: 'أَطْلُبُ مُسَاعَدَةَ أُمِّي. أَحْسَنْتَ! يَجِبُ أَنْ تَسْتَعِينَ بِالْكِبَارِ.', isCorrect: true }
+      ]
+    },
+    {
+      id: 2, title: "مساعدة الجدة", icon: "👵",
+      question: "الجدة تحمل أشياء ثقيلة. كيف أساعدها؟",
+      spokenQuestion: "الْجَدَّةُ تَحْمِلُ أَشْيَاءَ ثَقِيلَةً. كَيْفَ أُسَاعِدُهَا؟",
+      options: [
+        { id: 0, text: 'أصرخ لتنتبه', spokenText: 'أَصْرُخُ لِتَنْتَبِهَ. خَطَأ! التَّحَدُّثُ بِهُدُوءٍ أَفْضَلُ.', isCorrect: false },
+        { id: 1, text: 'أساعدها بحمل جزء خفيف', spokenText: 'أُسَاعِدُهَا بِحَمْلِ جُزْءٍ خَفِيفٍ. مُمْتَازٌ! سَاعِدْهَا بِمَا تَسْتَطِيعُ.', isCorrect: true }
+      ]
+    },
+    {
+      id: 3, title: "طائر مصاب", icon: "🐦❤️‍🩹",
+      question: "وجدت طائراً صغيراً مصاباً. ماذا أفعل؟",
+      spokenQuestion: "وَجَدْتُ طَائِرًا صَغِيرًا مُصَابًا. مَاذَا أَفْعَلُ؟",
+      options: [
+        { id: 0, text: 'ألعبه معه', spokenText: 'أَلْعَبُ مَعَهُ. خَطَأ! الْحَيَوَانُ الْمُصَابُ يَحْتَاجُ رَاحَةً.', isCorrect: false },
+        { id: 1, text: 'أخبر والدي', spokenText: 'أُخْبِرُ وَالِدِي. أَحْسَنْتَ! الْكِبَارُ يَعْرِفُونَ مَاذَا يَفْعَلُونَ.', isCorrect: true }
+      ]
+    },
+    {
+      id: 4, title: "دمية مكسورة", icon: "🧸💔",
+      question: "دميتك المفضلة انكسرت. كيف تتصرف؟",
+      spokenQuestion: "دُمْيَتُكَ الْمُفَضَّلَةُ انْكَسَرَتْ. كَيْفَ تَتَصَرَّفُ؟",
+      options: [
+        { id: 0, text: 'أرميها', spokenText: 'أَرْمِيهَا. خَطَأ! إِصْلَاحُ الْأَشْيَاءِ أَفْضَلُ مِنْ رَمْيِهَا.', isCorrect: false },
+        { id: 1, text: 'أصلحها مع والدي', spokenText: 'أُصْلِحُهَا مَعَ وَالِدِي. مُمْتَازٌ! التَّعَلُّمُ مَعَ الْكِبَارِ جَمِيلٌ.', isCorrect: true }
+      ]
+    }
+  ];
+
+  useEffect(() => {
+    const loadHeroName = async () => {
+      const profile = await AsyncStorage.getItem('userProfile');
+      if (profile) setHeroName(JSON.parse(profile).name || 'يُويَا');
+    };
+    loadHeroName();
+  }, []);
+
+  const speak = (text) => {
+    Speech.stop();
+    Speech.speak(text, { language: 'ar', rate: 0.8 });
   };
 
-  const generateItems = () => {
-    let newItems = [];
-    // 20 جوهرة مبعثرة
-    for (let j = 0; j < 20; j++) {
-      newItems.push({
-        id: 'gem'+j,
-        type: '💎',
-        x: Math.random() * (width - 60),
-        y: movementType === "falling" ? -50 : Math.random() * (height - 300) + 100,
-        anim: new Animated.Value(0)
-      });
+  const initGame = () => {
+    let nPlats = [], nGems = [], nBooks = [], nHearts = [];
+    nPlats.push({ x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH });
+    
+    for (let i = 1; i < 80; i++) {
+      let py = (SCREEN_HEIGHT - 100) - (i * 170);
+      let px = Math.random() * (SCREEN_WIDTH - 110);
+      nPlats.push({ x: px, y: py, width: 110 });
+      if (Math.random() > 0.7) nGems.push({ x: px + 35, y: py - 50, id: 'g'+i, collected: false });
+      if (i === 40) nHearts.push({ x: px + 40, y: py - 50, id: 'h1', collected: false });
+      if (i % 18 === 0 && nBooks.length < 4) {
+        nBooks.push({ ...bookQuestions[nBooks.length], x: px + 35, y: py - 70, collected: false, id: 'b'+i });
+      }
     }
-    // 6 صخور ثابتة كعوائق
-    for (let j = 0; j < 6; j++) {
-      newItems.push({ id: 'rock'+j, type: '🪨', x: Math.random() * (width - 60), y: Math.random() * (height - 300) + 100 });
+    setPlatforms(nPlats); setGems(nGems); setBooks(nBooks); setHearts(nHearts);
+    setScore(0); setLives(3); setCollectedBooks(0); setGameState('playing'); setShowWinScreen(false);
+    pos.current = { x: SCREEN_WIDTH/2 - HERO_WIDTH/2, y: SCREEN_HEIGHT - 200 };
+    vel.current = { x: 0, y: 0 }; scrollOffset.current = 0;
+    speak("هَيَّا بِنَا نَبْدَأُ");
+  };
+
+  const update = () => {
+    scrollOffset.current += CONSTANT_SCROLL_SPEED;
+    scrollAnim.setValue(scrollOffset.current);
+    const heroScreenY = pos.current.y + scrollOffset.current;
+    if (heroScreenY < 80) scrollOffset.current += (80 - heroScreenY);
+    vel.current.y += GRAVITY;
+    pos.current.y += vel.current.y;
+    pos.current.x += vel.current.x;
+
+    if (pos.current.x > SCREEN_WIDTH - 20) pos.current.x = -HERO_WIDTH + 20;
+    if (pos.current.x < -HERO_WIDTH + 20) pos.current.x = SCREEN_WIDTH - 20;
+
+    if (vel.current.y > 0) {
+      for (let p of platforms) {
+        if (pos.current.y + HERO_HEIGHT >= p.y && pos.current.y + HERO_HEIGHT <= p.y + 25 &&
+            pos.current.x + HERO_WIDTH - 15 >= p.x && pos.current.x + 15 <= p.x + p.width) {
+          vel.current.y = JUMP_POWER;
+          Vibration.vibrate(5);
+          break;
+        }
+      }
     }
-    setItems(newItems);
+
+    gems.forEach(g => {
+      if (!g.collected && Math.abs(pos.current.x + HERO_WIDTH/2 - (g.x + 15)) < 45 && Math.abs(pos.current.y + HERO_HEIGHT/2 - (g.y + 15)) < 60) {
+        g.collected = true; setScore(s => s + 10); Vibration.vibrate(10);
+      }
+    });
+
+    hearts.forEach(h => {
+      if (!h.collected && Math.abs(pos.current.x - h.x) < 45 && Math.abs(pos.current.y - h.y) < 45) {
+        h.collected = true; setLives(l => l + 1); Vibration.vibrate(20);
+      }
+    });
+
+    books.forEach(b => {
+      if (!b.collected && Math.abs(pos.current.x - b.x) < 55 && Math.abs(pos.current.y - b.y) < 55) {
+        b.collected = true; setCurrentQuestionData(b); setShowQuestion(true);
+        Vibration.vibrate(50); speak("وَجَدْتَ كِتَابًا جَدِيدًا. " + b.spokenQuestion);
+      }
+    });
+
+    if (pos.current.y > (SCREEN_HEIGHT - scrollOffset.current) + 200) {
+      clearInterval(gameLoopRef.current);
+      setGameState('home');
+    }
+    animPos.setValue({ x: pos.current.x, y: pos.current.y });
   };
 
   useEffect(() => {
-    if (gameState === 'PLAYING' && timeLeft > 0) {
-      const timer = setInterval(() => setTimeLeft(t => {
-        if (t <= 1) { finishGame(); return 0; }
-        return t - 1;
-      }), 1000);
-      return () => clearInterval(timer);
+    if (gameState === 'playing' && !showQuestion && !showWinScreen) {
+      gameLoopRef.current = setInterval(update, 16);
+    } else clearInterval(gameLoopRef.current);
+    return () => clearInterval(gameLoopRef.current);
+  }, [gameState, showQuestion, showWinScreen]);
+
+  const handleAnswer = (opt) => {
+    speak(opt.spokenText);
+    if (opt.isCorrect) {
+      setCollectedBooks(c => {
+        if (c + 1 >= 4) {
+          setTimeout(() => setShowWinScreen(true), 1500);
+          return 4;
+        }
+        return c + 1;
+      });
+      setShowQuestion(false);
+    } else {
+      setLives(l => {
+        if (l <= 1) { setTimeout(() => { setShowQuestion(false); setGameState('home'); }, 1500); return 0; }
+        return l - 1;
+      });
     }
-  }, [gameState, timeLeft]);
-
-  const collectItem = (id) => {
-    setItems(prev => prev.filter(item => item.id !== id));
-    setScore(s => {
-      const newScore = s + 1;
-      if (newScore === 20) setGameState('WINNER');
-      return newScore;
-    });
   };
 
-  const finishGame = async () => {
-    setGameState('WINNER');
-    const saved = await AsyncStorage.getItem('total_gems');
-    await AsyncStorage.setItem('total_gems', (parseInt(saved || '0') + score).toString());
+  const shareResults = () => {
+    const msg = `أنا البطل ${heroName} أنهيت المستوى الثامن في لعبة يويا! تعلمت الكثير عن السلامة ومساعدة الآخرين. شاركني المغامرة!`;
+    Share.share({ message: msg });
   };
 
-  if (gameState === 'START') return (
-    <View style={styles.center}>
-      <Text style={styles.title}>{route.params?.gameName || 'لعبة متنوعة 8'}</Text>
-      <TouchableOpacity style={styles.startBtn} onPress={startGame}><Text style={styles.btnText}>ابدأ المغامرة 🚀</Text></TouchableOpacity>
-    </View>
-  );
-
-  if (gameState === 'WINNER') return (
-    <View style={styles.winner}>
-      <Text style={styles.winnerText}>انتهى التحدي! 🎉</Text>
-      <Text style={styles.scoreText}>الجواهر: {score}</Text>
-      <TouchableOpacity style={styles.startBtn} onPress={() => navigation.navigate('GamesList')}><Text style={styles.btnText}>العودة للألعاب</Text></TouchableOpacity>
-    </View>
-  );
+  const joystickResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gs) => {
+      let moveX = Math.max(-50, Math.min(50, gs.dx));
+      knobX.setValue(moveX);
+      vel.current.x = (moveX / 50) * 8.0;
+      setIsFacingRight(gs.dx > 0);
+    },
+    onPanResponderRelease: () => {
+      Animated.spring(knobX, { toValue: 0, useNativeDriver: true }).start();
+      vel.current.x = 0;
+    }
+  })).current;
 
   return (
-    <ImageBackground source={{ uri: 'https://img.freepik.com/free-vector/forest-scene-with-various-forest-trees_1308-55271.jpg' }} style={styles.container}>
-      <View style={styles.header}><Text style={styles.headerTxt}>⏱️ {timeLeft} | 💎 {score}/20</Text></View>
-      
-      {/* 5 تنانين تتحرك ببطء */}
-      {[1,2,3,4,5].map(d => (
-        <Text key={'d'+d} style={[styles.dragon, { top: 150 + (d*60), left: (timeLeft * (d*5)) % width }]}>🐲</Text>
-      ))}
-
-      {items.map(item => (
-        <TouchableOpacity 
-          key={item.id} 
-          onPress={() => item.type === '💎' && collectItem(item.id)}
-          style={[styles.item, { left: item.x, top: item.y }]}
-        >
-          <Text style={{fontSize: item.type === '🪨' ? 45 : 35}}>{item.type}</Text>
-        </TouchableOpacity>
-      ))}
-    </ImageBackground>
+    <View style={styles.container}>
+      {gameState === 'playing' ? (
+        showWinScreen ? (
+          <View style={styles.winOverlay}>
+            <Text style={styles.winEmoji}>🏆</Text>
+            <Text style={styles.winTitle}>أَحْسَنْتَ يَا بَطَلُ!</Text>
+            <TouchableOpacity style={styles.btnAction} onPress={initGame}><Text style={styles.btnText}>الْعَبْ ثَانِيَةً</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.btnAction, {backgroundColor: '#3498DB', marginTop: 15}]} onPress={shareResults}><Text style={styles.btnText}>مشاركة</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.btnAction, {backgroundColor: '#E74C3C', marginTop: 15}]} onPress={() => navigation.goBack()}><Text style={styles.btnText}>خروج</Text></TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.gameArea}>
+            <View style={styles.hud}>
+              <Text style={styles.hudText}>💎 {score}</Text>
+              <Text style={styles.hudText}>📚 {collectedBooks}/4</Text>
+              <Text style={[styles.hudText, {color: '#FF4757'}]}>❤️ {lives}</Text>
+            </View>
+            <Animated.View style={{ flex: 1, transform: [{ translateY: scrollAnim }] }}>
+              {platforms.map((p, i) => <View key={i} style={[styles.platform, { left: p.x, top: p.y, width: p.width }]} />)}
+              {gems.map(g => !g.collected && <Text key={g.id} style={[styles.item, { left: g.x, top: g.y }]}>💎</Text>)}
+              {hearts.map(h => !h.collected && <Text key={h.id} style={[styles.item, { left: h.x, top: h.y }]}>❤️</Text>)}
+              {books.map(b => !b.collected && <Text key={b.id} style={[styles.item, { left: b.x, top: b.y, fontSize: 40 }]}>📖</Text>)}
+              <Animated.View style={[styles.hero, { transform: [{ translateX: animPos.x }, { translateY: animPos.y }, { scaleX: isFacingRight ? 1 : -1 }] }]}>
+                <Image source={heroImage} style={styles.heroImg} />
+              </Animated.View>
+            </Animated.View>
+            <View style={styles.controls}><View style={styles.joyBase} {...joystickResponder.panHandlers}><Animated.View style={[styles.joyKnob, { transform: [{ translateX: knobX }] }]} /></View></View>
+            <Modal visible={showQuestion} transparent animationType="fade">
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalCard}>
+                  <Text style={styles.qText}>{currentQuestionData?.question}</Text>
+                  {currentQuestionData?.options.map((o, idx) => (
+                    <TouchableOpacity key={idx} style={styles.optBtn} onPress={() => handleAnswer(o)}><Text style={styles.optTxt}>{o.text}</Text></TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </Modal>
+          </View>
+        )
+      ) : (
+        <View style={styles.menu}>
+          <Image source={heroImage} style={styles.menuImg} />
+          <Text style={styles.menuTitle}>مَغَامَرَةُ الْكُتُبِ</Text>
+          <TouchableOpacity style={styles.startBtn} onPress={initGame}><Text style={styles.startBtnTxt}>اِبْدَأِ اللَّعِبَ 🚀</Text></TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F9FF' },
-  container: { flex: 1 },
-  header: { paddingTop: 50, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  headerTxt: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
-  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 30 },
-  startBtn: { backgroundColor: '#FF9F43', padding: 15, borderRadius: 25 },
-  btnText: { color: '#FFF', fontWeight: 'bold' },
-  item: { position: 'absolute' },
-  dragon: { position: 'absolute', fontSize: 40, opacity: 0.8 },
-  winner: { flex: 1, backgroundColor: '#27AE60', justifyContent: 'center', alignItems: 'center' },
-  winnerText: { fontSize: 35, color: '#FFF', fontWeight: 'bold' },
-  scoreText: { fontSize: 22, color: '#FFD700', marginVertical: 20 }
+  container: { flex: 1, backgroundColor: '#87CEEB' },
+  gameArea: { flex: 1 },
+  hud: { 
+    position: 'absolute', 
+    top: 50, 
+    width: '90%', 
+    alignSelf: 'center', 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    zIndex: 10, 
+    backgroundColor: 'rgba(255,255,255,0.9)', 
+    padding: 12, 
+    borderRadius: 20 
+  },
+  hudText: { fontSize: 20, fontWeight: 'bold' },
+  platform: { position: 'absolute', height: 16, backgroundColor: '#8B4513', borderRadius: 8, borderTopWidth: 4, borderTopColor: '#2ECC71' },
+  item: { position: 'absolute', fontSize: 32 },
+  hero: { position: 'absolute', width: HERO_WIDTH, height: HERO_HEIGHT },
+  heroImg: { width: '100%', height: '100%', resizeMode: 'contain' },
+  controls: { position: 'absolute', bottom: 50, width: '100%', alignItems: 'center' },
+  joyBase: { width: 120, height: 60, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 30, justifyContent: 'center', padding: 5, borderWidth: 1, borderColor: 'white' },
+  joyKnob: { width: 50, height: 50, backgroundColor: 'white', borderRadius: 25 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
+  modalCard: { width: '85%', backgroundColor: 'white', borderRadius: 30, padding: 20, alignItems: 'center' },
+  qText: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  optBtn: { width: '100%', backgroundColor: '#F8F9FA', padding: 16, borderRadius: 15, marginVertical: 6, borderWidth: 1, borderColor: '#EEE' },
+  optTxt: { fontSize: 18, textAlign: 'center' },
+  menu: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2C3E50' },
+  menuImg: { width: 160, height: 180, marginBottom: 20 },
+  menuTitle: { fontSize: 45, color: 'white', fontWeight: 'bold', marginBottom: 30 },
+  startBtn: { backgroundColor: '#FF4757', paddingVertical: 18, paddingHorizontal: 50, borderRadius: 40 },
+  startBtnTxt: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+  winOverlay: { flex: 1, backgroundColor: '#2F3542', justifyContent: 'center', alignItems: 'center' },
+  winEmoji: { fontSize: 100, marginBottom: 20 },
+  winTitle: { fontSize: 32, color: 'white', fontWeight: 'bold', marginBottom: 30 },
+  btnAction: { backgroundColor: '#2ECC71', padding: 18, borderRadius: 20, width: '70%', alignItems: 'center' },
+  btnText: { color: 'white', fontSize: 22, fontWeight: 'bold' }
 });
+
+export default YoyaGameV8;

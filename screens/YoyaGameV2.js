@@ -1,76 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  StyleSheet, View, Text, TouchableOpacity,
-  Dimensions, Alert, Animated
+  StyleSheet, View, Text, Dimensions, Image, Animated,
+  Vibration, PanResponder, Modal, ScrollView,
+  TouchableOpacity, Share
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const GRAVITY = 0.50;
+const JUMP_POWER = -15.5; 
+const CONSTANT_SCROLL_SPEED = 2.0;
+const HERO_WIDTH = 70;
+const HERO_HEIGHT = 90;
+
 const YoyaGameV2 = ({ navigation }) => {
   const [gameState, setGameState] = useState('home');
+  const [platforms, setPlatforms] = useState([]);
+  const [gems, setGems] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [hearts, setHearts] = useState([]);
   const [score, setScore] = useState(0);
-  const [currentLevel, setCurrentLevel] = useState(0);
-  const [heroName, setHeroName] = useState('بَطَلُنَا');
+  const [collectedBooks, setCollectedBooks] = useState(0);
   const [lives, setLives] = useState(3);
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [gamePaused, setGamePaused] = useState(false);
-  
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const timerRef = useRef(null);
+  const [isFacingRight, setIsFacingRight] = useState(true);
+  const [userName, setUserName] = useState('يُويَا');
+  const [showQuestion, setShowQuestion] = useState(false);
+  const [currentQuestionData, setCurrentQuestionData] = useState(null);
+  const [showWinScreen, setShowWinScreen] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('blur', () => {
-      Speech.stop();
-      if (timerRef.current) clearInterval(timerRef.current);
-    });
-    return unsubscribe;
-  }, [navigation]);
+  const pos = useRef({ x: SCREEN_WIDTH / 2 - HERO_WIDTH / 2, y: SCREEN_HEIGHT - 200 });
+  const vel = useRef({ x: 0, y: 0 });
+  const scrollOffset = useRef(0);
+  const gameLoopRef = useRef(null);
 
-  useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const sProfile = await AsyncStorage.getItem('userProfile');
-        if (sProfile) {
-          const profileData = JSON.parse(sProfile);
-          if (profileData.name) setHeroName(profileData.name);
-        }
-      } catch (e) { console.error("Error loading profile:", e); }
-    };
-    loadUserData();
-  }, []);
+  const animPos = useRef(new Animated.ValueXY({ x: pos.current.x, y: pos.current.y })).current;
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const knobX = useRef(new Animated.Value(0)).current;
 
-  const levels = [
-    {
-      id: 0,
-      title: "أَمَانَةُ الْبَطَلِ",
-      problem: "وَجَدْتَ مِحْفَظَةً مَلِيئَةً بِالنُّقُودِ فِي سَاحَةِ الْمَدْرَسَةِ، مَاذَا تَفْعَلُ؟",
-      image: '👝',
-      options: [
-        { id: 0, text: "آخُذُهَا لِنَفْسِي لِأَشْتَرِيَ لُعْبَةً", isCorrect: false, message: "لَا يَا بَطَلُ، هَذِهِ لَيْسَتْ أَمَانَةً." },
-        { id: 1, text: "أُعْطِيهَا لِلْمُعَلِّمِ لِيَبْحَثَ عَنْ صَاحِبِهَا", isCorrect: true, message: "رَائِعٌ! الأَمَانَةُ مِنْ صِفَاتِ الْأَبْطَالِ." }
-      ]
-    },
-    {
-      id: 1,
-      title: "الرِّفْقُ بِالْحَيَوَانِ",
-      problem: "رَأَيْتَ قِطَّةً جَائِعَةً تَبْحَثُ عَنْ طَعَامٍ، مَاذَا تَفْعَلُ؟",
-      image: '🐈',
-      options: [
-        { id: 0, text: "أُقَدِّمُ لَهَا بَعْضَ الطَّعَامِ وَالْمَاءِ", isCorrect: true, message: "رَائِعٌ! الرِّفْقُ بِالْحَيَوَانِ يَدُلُّ عَلَى قَلْبِكَ الطَّيِّبِ." },
-        { id: 1, text: "أُخِيفُهَا لِتَهْرُبَ بَعِيداً", isCorrect: false, message: "لَا يَا بَطَلُ، الْأَبْطَالُ لَا يُؤْذُونَ الضُّعَفَاءَ." }
-      ]
-    },
-    {
-      id: 2,
-      title: "التَّعَاوُنُ",
-      problem: "أُمُّكَ تَقُومُ بِتَنْظِيفِ الْمَنْزِلِ، كَيْفَ تُسَاعِدُهَا؟",
-      image: '🏠',
-      options: [
-        { id: 0, text: "أُرَتِّبُ غُرْفَتِي وَأَلْعَابِي", isCorrect: true, message: "بَطَلٌ مُطِيعٌ! الْمُسَاعَدَةُ تَنْشُرُ السَّعَادَةَ." },
-        { id: 1, text: "أَسْتَمِرُّ فِي لَعِبِ الْفِيدْيُو", isCorrect: false, message: "الْبَطَلُ يُسَاعِدُ عَائِلَتَهُ دَائِماً." }
-      ]
-    }
+  const heroImage = require('../assets/Boy.gif');
+
+  const bookQuestionsV2 = [
+    { id: 1, title: "نظافة المكان", icon: "🚮", question: "رأيت ورقة ملقاة على الأرض في الحديقة. ماذا تفعل؟", spokenQuestion: "رَأَيْتَ وَرَقَةً مُلْقَاةً عَلَى الْأَرْضِ فِي الْحَدِيقَةِ. مَاذَا تَفْعَلُ؟", summary: "تعلمت الحفاظ على نظافة البيئة والحديقة.", options: [{ id: 0, text: 'أتركها مكانها', spokenText: 'أَتْرُكُهَا مَكَانَهَا. خَطَأ! النَّظَافَةُ مِنَ الْإِيمَانِ.', isCorrect: false }, { id: 1, text: 'أضعها في السلة', spokenText: 'أَضَعُهَا فِي السَّلَّةِ. رَائِعٌ! أَنْتَ بَطَلٌ نَظِيفٌ.', isCorrect: true }] },
+    { id: 2, title: "احترام الدور", icon: "🚶‍♂️🚶‍♀️", question: "هناك طابور طويل عند اللعبة. ماذا تفعل؟", spokenQuestion: "هُنَاكَ طَابُورٌ طَوِيلٌ عِنْدَ اللُّعْبَةِ. مَاذَا تَفْعَلُ؟", summary: "تعلمت الصبر واحترام دور الآخرين.", options: [{ id: 0, text: 'أدفع الآخرين لأسبقهم', spokenText: 'أَدْفَعُ الْآخَرِينَ لِأَسْبِقَهُمْ. خَطَأ! يَجِبُ احْتِرَامُ الدَّوْرِ.', isCorrect: false }, { id: 1, text: 'أنتظر دوري بهدوء', spokenText: 'أَنْتَظِرُ دَوْرِي بِهُدُوءِ. مُمْتَازٌ! الصَّبْرُ صِفَةٌ جَمِيلَةٌ.', isCorrect: true }] },
+    { id: 3, title: "إطفاء الأنوار", icon: "💡", question: "خرجت من الغرفة والضوء يعمل. ماذا تفعل؟", spokenQuestion: "خَرَجْتَ مِنَ الْغُرْفَةِ وَالضَّوْءُ يَعْمَلُ. مَاذَا تَفْعَلُ؟", summary: "تعلمت توفير الكهرباء وحماية الموارد.", options: [{ id: 0, text: 'أتركه يعمل', spokenText: 'أَتْرُكُهُ يَعْمَلُ. خَطَأ! يَجِبُ تَوْفِيرُ الْكَهْرُبَاءِ.', isCorrect: false }, { id: 1, text: 'أطفئ الضوء', spokenText: 'أُطْفِئُ الضَّوْءَ. أَحْسَنْتَ! أَنْتَ طِفْلٌ مُوَفِّرٌ.', isCorrect: true }] },
+    { id: 4, title: "الاعتذار", icon: "🙏", question: "صدمت زميلك بالخطأ أثناء اللعب. ماذا تقول؟", spokenQuestion: "صَدَمْتَ زَمِيلَكَ بِالْخَطَأِ أَثْنَاءَ اللَّعِبِ. مَاذَا تَقُولُ؟", summary: "تعلمت شجاعة الاعتذار عند الخطأ.", options: [{ id: 0, text: 'أهرب بعيداً', spokenText: 'أَهْرُبُ بَعِيدًا. خَطَأ! الهروبُ لَيْسَ حَلًّا.', isCorrect: false }, { id: 1, text: 'أقول أنا آسف', spokenText: 'أَقُولُ أَنَا آسِفٌ. بَطَلٌ! الِاعْتِذَارُ مِنْ شِيَمِ الْأَقْوِيَاءِ.', isCorrect: true }] }
   ];
 
   const speak = (text) => {
@@ -78,112 +54,178 @@ const YoyaGameV2 = ({ navigation }) => {
     Speech.speak(text, { language: 'ar', rate: 0.85 });
   };
 
-  useEffect(() => {
-    if (gameState === 'playing') {
-      const level = levels[currentLevel];
-      speak(`${level.problem}. الخيار الأول: ${level.options[0].text}. الخيار الثاني: ${level.options[1].text}`);
-    }
-  }, [currentLevel, gameState]);
+  const initGame = () => {
+    let nPlats = [], nGems = [], nBooks = [], nHearts = [];
+    nPlats.push({ x: 0, y: SCREEN_HEIGHT - 100, width: SCREEN_WIDTH, moving: false });
 
-  useEffect(() => {
-    if (gameState === 'playing' && !gamePaused && timeLeft > 0) {
-      timerRef.current = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-      return () => clearInterval(timerRef.current);
-    } else if (timeLeft === 0 && gameState === 'playing') {
-      handleTimeUp();
+    // تقليل طول اللعبة للنصف (حوالي 80 حاجز كافية بدلاً من 300) لسرعة الوصول للكتاب 4
+    for (let i = 1; i < 80; i++) {
+      let py = (SCREEN_HEIGHT - 100) - (i * 170);
+      let px = Math.random() * (SCREEN_WIDTH - 110);
+      let isMoving = i > 10 && Math.random() > 0.7; // تحريك بعض المنصات
+      nPlats.push({ x: px, y: py, width: 110, moving: isMoving, dir: Math.random() > 0.5 ? 1 : -1 });
+      
+      if (Math.random() > 0.7) nGems.push({ x: px + 35, y: py - 50, id: 'g'+i, collected: false });
+      if (i === 35) nHearts.push({ x: px + 40, y: py - 50, id: 'h1', collected: false });
+      
+      // توزيع الكتب الأربعة على مسافة الـ 80 حاجز
+      if (i % 18 === 0 && nBooks.length < 4) {
+        nBooks.push({ ...bookQuestionsV2[nBooks.length], x: px + 35, y: py - 70, collected: false, id: 'b'+i });
+      }
     }
-  }, [gameState, gamePaused, timeLeft]);
-
-  const handleAnswer = (option) => {
-    if (gamePaused) return;
-    setGamePaused(true);
-    speak(option.message);
-    if (option.isCorrect) {
-      setScore(s => s + 10);
-      Alert.alert("أَحْسَنْتَ! 🏆", option.message, [{ text: "التَّالِي", onPress: goToNextLevel }]);
-    } else {
-      setLives(l => l - 1);
-      if (lives <= 1) finishGame();
-      else Alert.alert("فَكِّرْ جَيِّداً", option.message, [{ text: "مُحَاوَلَة", onPress: () => setGamePaused(false) }]);
-    }
+    setPlatforms(nPlats); setGems(nGems); setBooks(nBooks); setHearts(nHearts);
+    setScore(0); setLives(3); setCollectedBooks(0); setGameState('playing'); setShowWinScreen(false);
+    scrollOffset.current = 0;
+    pos.current = { x: SCREEN_WIDTH/2 - HERO_WIDTH/2, y: SCREEN_HEIGHT - 200 };
+    vel.current = { x: 0, y: 0 };
+    speak("مرحباً بك يا " + userName + " في المغامرة الثانية");
   };
 
-  const goToNextLevel = () => {
-    if (currentLevel < levels.length - 1) {
-      setCurrentLevel(prev => prev + 1);
-      setTimeLeft(30);
-      setGamePaused(false);
-    } else {
-      finishGame();
-    }
-  };
+  const update = () => {
+    scrollOffset.current += CONSTANT_SCROLL_SPEED;
+    scrollAnim.setValue(scrollOffset.current);
 
-  const finishGame = async () => {
-    setGameState('score');
-    if (lives > 0) {
-      try {
-        const gameID = 'EthicChallenge_Completed';
-        const alreadyWon = await AsyncStorage.getItem(gameID);
-        if (!alreadyWon) {
-          const currentGems = await AsyncStorage.getItem('total_gems');
-          const total = parseInt(currentGems || '0') + 20;
-          await AsyncStorage.setItem('total_gems', total.toString());
-          await AsyncStorage.setItem(gameID, 'true');
-          Alert.alert("هَدِيَّةٌ! 💎", "لَقَدْ حَصَلْتَ عَلَى 20 جَوْهَرَةً لِأَوَّلِ مَرَّةٍ!");
+    // حركة المنصات يميناً ويساراً
+    setPlatforms(prev => prev.map(p => {
+      if (!p.moving) return p;
+      let nextX = p.x + (p.dir * 1.5);
+      if (nextX > SCREEN_WIDTH - p.width || nextX < 0) p.dir *= -1;
+      return { ...p, x: nextX };
+    }));
+
+    vel.current.y += GRAVITY;
+    pos.current.y += vel.current.y;
+    pos.current.x += vel.current.x;
+
+    // حماية: عدم تجاوز حدود الشاشة يميناً ويساراً
+    if (pos.current.x > SCREEN_WIDTH - HERO_WIDTH) pos.current.x = SCREEN_WIDTH - HERO_WIDTH;
+    if (pos.current.x < 0) pos.current.x = 0;
+
+    // التصادم مع المنصات
+    if (vel.current.y > 0) {
+      for (let p of platforms) {
+        if (pos.current.y + HERO_HEIGHT >= p.y && pos.current.y + HERO_HEIGHT <= p.y + 25 &&
+            pos.current.x + HERO_WIDTH - 15 >= p.x && pos.current.x + 15 <= p.x + p.width) {
+          vel.current.y = JUMP_POWER; Vibration.vibrate(5); break;
         }
-      } catch (e) { console.error("Update Balance Error", e); }
+      }
+    }
+
+    // التقاط الجواهر والكتب
+    gems.forEach(g => {
+        if (!g.collected && Math.abs(pos.current.x - g.x) < 40 && Math.abs(pos.current.y - g.y) < 40) {
+          g.collected = true; setScore(s => s + 1);
+        }
+    });
+
+    books.forEach(b => {
+      if (!b.collected && Math.abs(pos.current.x - b.x) < 55 && Math.abs(pos.current.y - b.y) < 55) {
+        b.collected = true; setCurrentQuestionData(b); setShowQuestion(true);
+        // نطق السؤال والاختيارات
+        speak(b.spokenQuestion + " . الخيار الأول: " + b.options[0].text + " . الخيار الثاني: " + b.options[1].text);
+      }
+    });
+
+    if (pos.current.y > (SCREEN_HEIGHT - scrollOffset.current) + 200) setGameState('home');
+    animPos.setValue({ x: pos.current.x, y: pos.current.y });
+  };
+
+  useEffect(() => {
+    if (gameState === 'playing' && !showQuestion && !showWinScreen) {
+      gameLoopRef.current = setInterval(update, 16);
+    } else clearInterval(gameLoopRef.current);
+    return () => clearInterval(gameLoopRef.current);
+  }, [gameState, showQuestion, showWinScreen, platforms]);
+
+  const handleAnswer = (opt) => {
+    speak(opt.spokenText);
+    if (opt.isCorrect) {
+      setCollectedBooks(c => {
+        if (c + 1 >= 4) {
+          setTimeout(() => {
+            setShowWinScreen(true);
+            const summaryText = bookQuestionsV2.map(q => q.summary).join("، و ");
+            speak("أحسنت يا " + userName + "! " + summaryText);
+          }, 1000);
+          return 4;
+        }
+        return c + 1;
+      });
+      setShowQuestion(false);
+    } else {
+      setLives(l => l > 1 ? l - 1 : (setGameState('home'), 0));
     }
   };
 
-  const handleTimeUp = () => {
-    setGamePaused(true);
-    Alert.alert("انْتَهَى الْوَقْتُ", "حَاوِلْ مَرَّةً أُخْرَى", [{ text: "إِعَادَة", onPress: () => { setTimeLeft(30); setGamePaused(false); } }]);
-  };
-
-  const exitToGames = () => {
-    Speech.stop();
-    navigation.navigate('GamesList');
-  };
+  const joystickResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gs) => {
+      let moveX = Math.max(-50, Math.min(50, gs.dx));
+      knobX.setValue(moveX);
+      vel.current.x = (moveX / 50) * 7.5;
+      setIsFacingRight(gs.dx > 0);
+    },
+    onPanResponderRelease: () => {
+      Animated.spring(knobX, { toValue: 0, useNativeDriver: true }).start();
+      vel.current.x = 0;
+    }
+  })).current;
 
   return (
-    <View style={styles.mainContainer}>
-      <TouchableOpacity style={styles.closeBtn} onPress={exitToGames}>
-        <Ionicons name="close-circle" size={40} color="#E74C3C" />
-      </TouchableOpacity>
-
-      {gameState === 'home' ? (
-        <View style={styles.container}>
-          <Text style={styles.title}>🏆 تَحَدِّي الْأَخْلَاقِ</Text>
-          <Text style={styles.nameTxt}>أَهْلًا {heroName} ✨</Text>
-          <TouchableOpacity style={styles.startBtn} onPress={() => setGameState('playing')}>
-            <Text style={styles.startBtnTxt}>إِبْدَأِ الْمُغَامَرَةَ 🚀</Text>
-          </TouchableOpacity>
-        </View>
-      ) : gameState === 'playing' ? (
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.stat}>❤️ {lives}</Text>
-            <Text style={styles.stat}>💎 {score}</Text>
-            <Text style={styles.stat}>⏰ {timeLeft}</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.emoji}>{levels[currentLevel].image}</Text>
-            <Text style={styles.question}>{levels[currentLevel].problem}</Text>
-          </View>
-          {levels[currentLevel].options.map((opt, i) => (
-            <TouchableOpacity key={i} style={styles.opt} onPress={() => handleAnswer(opt)}>
-              <Text style={styles.optTxt}>{opt.text}</Text>
+    <View style={styles.container}>
+      {gameState === 'playing' ? (
+        showWinScreen ? (
+          <View style={styles.winContainer}>
+            <Text style={styles.winEmoji}>🏆</Text>
+            <Text style={styles.winTitle}>بطل متميز يا {userName}!</Text>
+            <View style={styles.summaryBox}>
+                <Text style={styles.summaryTitle}>لقد تعلمت اليوم:</Text>
+                {bookQuestionsV2.map(q => <Text key={q.id} style={styles.skillText}>⭐ {q.summary}</Text>)}
+            </View>
+            <TouchableOpacity style={styles.winBtn} onPress={() => Share.share({message: "لقد فزت في لعبة يويَا وتعلمت مهارات جديدة!"})}>
+              <Ionicons name="share-social" size={24} color="white" />
+              <Text style={styles.winBtnText}>مشاركة الإنجاز</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+            <TouchableOpacity style={[styles.winBtn, {backgroundColor: '#E74C3C'}]} onPress={() => navigation.goBack()}>
+              <Ionicons name="exit" size={24} color="white" />
+              <Text style={styles.winBtnText}>خروج</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.gameArea}>
+            <View style={styles.hud}>
+              <Text style={styles.hudText}>💎 {score}</Text>
+              <Text style={styles.hudText}>📚 {collectedBooks}/4</Text>
+              <Text style={[styles.hudText, {color: '#FF4757'}]}>❤️ {lives}</Text>
+            </View>
+            <Animated.View style={{ flex: 1, transform: [{ translateY: scrollAnim }] }}>
+              {platforms.map((p, i) => (
+                <View key={i} style={[styles.platform, { left: p.x, top: p.y, width: p.width }]}>
+                    <View style={styles.grassTop} />
+                </View>
+              ))}
+              {books.map(b => !b.collected && <Text key={b.id} style={[styles.item, { left: b.x, top: b.y }]}>📖</Text>)}
+              {gems.map(g => !g.collected && <Text key={g.id} style={[styles.item, { left: g.x, top: g.y, fontSize: 24 }]}>💎</Text>)}
+              <Animated.View style={[styles.hero, { transform: [{ translateX: animPos.x }, { translateY: animPos.y }, { scaleX: isFacingRight ? 1 : -1 }] }]}>
+                <Image source={heroImage} style={styles.heroImg} />
+              </Animated.View>
+            </Animated.View>
+            <View style={styles.controls}><View style={styles.joyBase} {...joystickResponder.panHandlers}><Animated.View style={[styles.joyKnob, { transform: [{ translateX: knobX }] }]} /></View></View>
+            <Modal visible={showQuestion} transparent animationType="fade">
+              <View style={styles.modalOverlay}><View style={styles.modalCard}>
+                <Text style={styles.qText}>{currentQuestionData?.question}</Text>
+                {currentQuestionData?.options.map((o, idx) => (
+                  <TouchableOpacity key={idx} style={styles.optBtn} onPress={() => handleAnswer(o)}><Text style={styles.optTxt}>{o.text}</Text></TouchableOpacity>
+                ))}
+              </View></View>
+            </Modal>
+          </View>
+        )
       ) : (
-        <View style={styles.container}>
-          <Ionicons name="trophy" size={100} color="#F1C40F" />
-          <Text style={styles.title}>نِهَايَةُ التَّحَدِّي</Text>
-          <Text style={styles.scoreTxt}>{score} نُقْطَةً</Text>
-          <TouchableOpacity style={[styles.startBtn, {backgroundColor: '#3498DB'}]} onPress={exitToGames}>
-            <Text style={styles.startBtnTxt}>عَالَمُ الْأَلْعَابِ 🎮</Text>
-          </TouchableOpacity>
+        <View style={styles.menu}>
+          <Image source={heroImage} style={styles.menuImg} />
+          <Text style={styles.menuTitle}>مغامرة {userName}</Text>
+          <TouchableOpacity style={styles.startBtn} onPress={initGame}><Text style={styles.btnTxt}>ابدأ 🚀</Text></TouchableOpacity>
         </View>
       )}
     </View>
@@ -191,21 +233,35 @@ const YoyaGameV2 = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1, backgroundColor: '#F8F9FF' },
-  closeBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10 },
-  container: { flex: 1, padding: 20, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#2C3E50', marginBottom: 10, textAlign: 'center' },
-  nameTxt: { fontSize: 22, color: '#4A90E2', marginBottom: 30, fontWeight: 'bold' },
-  header: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 20, backgroundColor: '#FFF', padding: 15, borderRadius: 20, elevation: 3 },
-  stat: { fontSize: 18, fontWeight: 'bold' },
-  card: { backgroundColor: '#FFF', padding: 25, borderRadius: 25, alignItems: 'center', marginBottom: 20, elevation: 3, width: '100%' },
-  emoji: { fontSize: 60, marginBottom: 10 },
-  question: { fontSize: 20, textAlign: 'center', fontWeight: 'bold', lineHeight: 30 },
-  opt: { backgroundColor: '#FFF', padding: 20, borderRadius: 15, marginVertical: 8, width: '100%', elevation: 2, borderWidth: 1, borderColor: '#EEE' },
-  optTxt: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', color: '#34495E' },
-  startBtn: { backgroundColor: '#2ECC71', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, elevation: 5 },
-  startBtnTxt: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  scoreTxt: { fontSize: 40, fontWeight: 'bold', color: '#F1C40F', marginBottom: 30 }
+  container: { flex: 1, backgroundColor: '#87CEEB' },
+  hud: { position: 'absolute', top: 50, width: '65%', alignSelf: 'center', flexDirection: 'row', justifyContent: 'space-between', zIndex: 10, backgroundColor: 'rgba(255,255,255,0.25)', padding: 10, borderRadius: 25 },
+  hudText: { fontSize: 18, fontWeight: 'bold' },
+  platform: { position: 'absolute', height: 18, backgroundColor: '#8B4513', borderRadius: 5, overflow: 'hidden' },
+  grassTop: { height: 6, backgroundColor: '#2ECC71', width: '100%' },
+  item: { position: 'absolute', fontSize: 35 },
+  hero: { position: 'absolute', width: HERO_WIDTH, height: HERO_HEIGHT },
+  heroImg: { width: '100%', height: '100%', resizeMode: 'contain' },
+  controls: { position: 'absolute', bottom: 50, width: '100%', alignItems: 'center' },
+  joyBase: { width: 120, height: 60, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 30, justifyContent: 'center' },
+  joyKnob: { width: 50, height: 50, backgroundColor: 'white', borderRadius: 25, alignSelf: 'center' },
+  winContainer: { flex: 1, backgroundColor: '#2C3E50', alignItems: 'center', padding: 20 },
+  winEmoji: { fontSize: 80, marginTop: 40 },
+  winTitle: { fontSize: 24, color: 'white', fontWeight: 'bold', marginVertical: 10, textAlign: 'center' },
+  summaryBox: { backgroundColor: 'white', padding: 15, borderRadius: 20, width: '100%', marginVertical: 15 },
+  summaryTitle: { fontSize: 18, fontWeight: 'bold', color: '#2C3E50', marginBottom: 10, textAlign: 'center' },
+  skillText: { fontSize: 15, color: '#34495E', marginVertical: 3, textAlign: 'right' },
+  winBtn: { backgroundColor: '#3498DB', width: '90%', padding: 15, borderRadius: 15, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 8 },
+  winBtnText: { color: 'white', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  modalCard: { width: '85%', backgroundColor: 'white', borderRadius: 25, padding: 20 },
+  qText: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  optBtn: { backgroundColor: '#F0F0F0', padding: 15, borderRadius: 15, marginVertical: 8 },
+  optTxt: { fontSize: 18, textAlign: 'center', fontWeight: 'bold' },
+  menu: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#16A085' },
+  menuImg: { width: 120, height: 150, marginBottom: 20 },
+  menuTitle: { fontSize: 28, color: 'white', fontWeight: 'bold', marginBottom: 30 },
+  startBtn: { backgroundColor: '#E67E22', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30 },
+  btnTxt: { color: 'white', fontSize: 20, fontWeight: 'bold' }
 });
 
 export default YoyaGameV2;

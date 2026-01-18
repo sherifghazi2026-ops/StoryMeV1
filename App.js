@@ -34,6 +34,14 @@ import YoyaGameV18 from './screens/YoyaGameV18';
 import YoyaGameV19 from './screens/YoyaGameV19';
 import YoyaGameV20 from './screens/YoyaGameV20';
 
+// استيراد الألعاب الجديدة التي أنشأناها
+import ExplorationGame2D from './screens/ExplorationGame2D';
+import SimpleExplorationGame from './screens/SimpleExplorationGame';
+import PlatformerGame from './screens/PlatformerGame';
+
+// إضافة لعبة WorldExplorerGame الجديدة
+import WorldExplorerGame from './screens/WorldExplorerGame';
+
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -50,7 +58,7 @@ export default function App() {
         <Stack.Screen name="ChargeGems" component={ChargeGemsScreen} />
         <Stack.Screen name="ChargeCoins" component={ChargeCoinsScreen} />
 
-        {/* تسجيل جميع الألعاب */}
+        {/* تسجيل جميع ألعاب يويا */}
         <Stack.Screen name="YoyaGameV1" component={YoyaGameV1} />
         <Stack.Screen name="YoyaGameV2" component={YoyaGameV2} />
         <Stack.Screen name="YoyaGameV3" component={YoyaGameV3} />
@@ -71,6 +79,14 @@ export default function App() {
         <Stack.Screen name="YoyaGameV18" component={YoyaGameV18} />
         <Stack.Screen name="YoyaGameV19" component={YoyaGameV19} />
         <Stack.Screen name="YoyaGameV20" component={YoyaGameV20} />
+
+        {/* الألعاب الجديدة */}
+        <Stack.Screen name="ExplorationGame2D" component={ExplorationGame2D} />
+        <Stack.Screen name="SimpleExplorationGame" component={SimpleExplorationGame} />
+        <Stack.Screen name="PlatformerGame" component={PlatformerGame} />
+        
+        {/* لعبة WorldExplorerGame الجديدة */}
+        <Stack.Screen name="WorldExplorerGame" component={WorldExplorerGame} />
       </Stack.Navigator>
     </NavigationContainer>
   );
